@@ -1,0 +1,22 @@
+﻿using Aimsby.Application.Common.Interfaces;
+using Aimsby.Domain.Entities;
+
+namespace Aimsby.Infrastructure.Ai;
+
+/// <summary>
+/// Picks the streaming adapter for the configured provider. Unknown values fall
+/// back to Anthropic so a misconfigured install degrades to the default rather
+/// than failing to resolve a service.
+/// </summary>
+public class AiMessageStreamerFactory(
+    AnthropicMessageStreamer anthropic,
+    OpenAiCompatibleMessageStreamer openAiCompatible,
+    OllamaMessageStreamer ollama) : IAiMessageStreamerFactory
+{
+    public IAiMessageStreamer ForProvider(string provider) => provider switch
+    {
+        InstanceConfig.Providers.OpenAiCompatible => openAiCompatible,
+        InstanceConfig.Providers.Ollama => ollama,
+        _ => anthropic,
+    };
+}

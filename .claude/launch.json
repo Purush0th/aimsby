@@ -5,14 +5,14 @@
       "name": "web",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["ng", "serve", "--port", "4200"],
-      "cwd": "src/frontend/PersonaOS.Web",
+      "cwd": "src/frontend/Aimsby.Web",
       "port": 4200
     },
     {
       "name": "api",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--no-launch-profile"],
-      "cwd": "src/backend/PersonaOS.Api",
+      "cwd": "src/backend/Aimsby.Api",
       "env": {
         "ASPNETCORE_URLS": "http://localhost:5080",
         "ASPNETCORE_ENVIRONMENT": "Development"

@@ -1,4 +1,4 @@
-"""Fine-tunes Qwen2.5-3B-Instruct on the PersonaOS dataset with LoRA, and saves it merged.
+"""Fine-tunes Qwen2.5-3B-Instruct on the Aimsby dataset with LoRA, and saves it merged.
 
 Runs inside the unsloth container (see README.md in this folder). The loss is on the assistant's
 turns only: the system prompt, tools and user words are context, not something to learn to write.

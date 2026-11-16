@@ -1,20 +1,24 @@
-# PersonaOS — self-hosted personal AI assistant.
+# Aimsby — self-hosted personal AI assistant.
 #
 #   cp .env.example .env      # then edit it (JWT_SIGNING_KEY is required)
 #   docker compose up -d
 #   open http://localhost:8080  → the Setup Wizard
 #
-# No database service: PersonaOS uses embedded SQLite, so the whole stack is just
+# No database service: Aimsby uses embedded SQLite, so the whole stack is just
 # the API + the web host. Everything persists in the `api-data` volume.
 #
 # Published images are used by default. To build from a source checkout instead:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Legacy ids, kept on purpose from before the rename to Aimsby: the project name (it prefixes the
+# data volumes, personaos_api-data and the rest), the database file name (personaos.db) and the
+# older PERSONAOS_* settings in .env, which still work when the AIMSBY_* one is not set.
 
 name: personaos
 
 services:
   api:
-    image: ghcr.io/purush0th/personaos-api:${PERSONAOS_VERSION:-latest}
+    image: ghcr.io/purush0th/aimsby-api:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
     environment:
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env}
       # The whole instance persists under /app/data (one volume):
@@ -41,20 +45,20 @@ services:
       - api-data:/app/data
       - updates:/app/updates
       # Recommended: put backups on a different disk than api-data, e.g.
-      # - /srv/personaos-backups:/app/data/backups
+      # - /srv/aimsby-backups:/app/data/backups
     expose:
       - "8080"
     restart: unless-stopped
 
   web:
-    image: ghcr.io/purush0th/personaos-web:${PERSONAOS_VERSION:-latest}
+    image: ghcr.io/purush0th/aimsby-web:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
     depends_on:
       - api
     # The only port published to the host. Bound to loopback by default so the
     # instance is reachable over Tailscale or a reverse proxy, not the open
-    # internet. Set PERSONAOS_BIND=0.0.0.0 only if you know what you're doing.
+    # internet. Set AIMSBY_BIND=0.0.0.0 only if you know what you're doing.
     ports:
-      - "${PERSONAOS_BIND:-127.0.0.1}:${PERSONAOS_PORT:-8080}:8080"
+      - "${AIMSBY_BIND:-${PERSONAOS_BIND:-127.0.0.1}}:${AIMSBY_PORT:-${PERSONAOS_PORT:-8080}}:8080"
     restart: unless-stopped
 
   # --- Optional: your own speech service (profile "speech", off by default) ----------------
@@ -64,11 +68,11 @@ services:
   #   Turn off:  remove that line, then `docker compose stop whisper kokoro`
   #   Or use OpenAI instead: leave the profile off and point Settings -> Speech service at
   #   https://api.openai.com/v1 with your key. Neither service publishes a port to the host;
-  #   PersonaOS reaches them over the compose network. Needs the NVIDIA container toolkit
+  #   Aimsby reaches them over the compose network. Needs the NVIDIA container toolkit
   #   (Docker Desktop on Windows has GPU support built in). See README "Voice".
   whisper:
     profiles: ["speech"]
-    image: ghcr.io/purush0th/personaos-whisper:${PERSONAOS_VERSION:-latest}
+    image: ghcr.io/purush0th/aimsby-whisper:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
     volumes:
@@ -96,10 +100,10 @@ services:
 
   # --- Optional: the model on this machine (profile "ollama", off by default) -----------------
   # Ollama in a container, reachable only over the compose network: in Settings → AI provider
-  # choose Ollama and press "Find Ollama"; PersonaOS finds http://ollama:11434 and downloads the
-  # recommended model into it, named personaos-qwen3:4b. By hand instead:
-  #   docker compose exec ollama ollama pull hf.co/purush0th/personaos-qwen3-4b-instruct-GGUF:Q4_K_M
-  #   docker compose exec ollama ollama cp hf.co/purush0th/personaos-qwen3-4b-instruct-GGUF:Q4_K_M personaos-qwen3:4b
+  # choose Ollama and press "Find Ollama"; Aimsby finds http://ollama:11434 and downloads the
+  # recommended model into it, named aimsby-qwen3:4b. By hand instead:
+  #   docker compose exec ollama ollama pull hf.co/purush0th/aimsby-qwen3-4b-instruct-GGUF:Q4_K_M
+  #   docker compose exec ollama ollama cp hf.co/purush0th/aimsby-qwen3-4b-instruct-GGUF:Q4_K_M aimsby-qwen3:4b
   # Next to the speech service the recommended model needs a card with 8 GB or more (README,
   # "Hardware for the recommended model"). The settings keep it small: one model loaded, one
   # request at a time, and a context cache at half the memory (flash attention, q8_0). 0.40.15 is the version
@@ -129,18 +133,18 @@ services:
   # data volume to ./backups, pulls the release, restarts, checks the API answers and rolls back
   # if it does not. It is the only service that can control Docker (the socket below), so it
   # publishes no port and accepts nothing but a version, through the `updates` volume.
-  #   Turn on: add "updater" to COMPOSE_PROFILES in .env, and set PERSONAOS_DIR to this folder
+  #   Turn on: add "updater" to COMPOSE_PROFILES in .env, and set AIMSBY_DIR to this folder
   #            (it is mounted at the same path inside, so compose finds the same files).
   updater:
     profiles: ["updater"]
-    image: ghcr.io/purush0th/personaos-updater:${PERSONAOS_VERSION:-latest}
+    image: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
     environment:
-      PROJECT_DIR: ${PERSONAOS_DIR:-/opt/personaos}
-      SELF_IMAGE: ghcr.io/purush0th/personaos-updater:${PERSONAOS_VERSION:-latest}
+      PROJECT_DIR: ${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}
+      SELF_IMAGE: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - updates:/updates
-      - ${PERSONAOS_DIR:-/opt/personaos}:${PERSONAOS_DIR:-/opt/personaos}
+      - ${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}:${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}
     restart: unless-stopped
 
 volumes:

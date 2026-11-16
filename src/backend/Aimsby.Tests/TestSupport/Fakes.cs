@@ -1,0 +1,531 @@
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Aimsby.Application.Ai;
+using Aimsby.Application.Ai.Guards;
+using Aimsby.Application.Ai.Prompts;
+using Aimsby.Application.Ai.Tools;
+using Aimsby.Application.Common.Interfaces;
+using Aimsby.Application.Configuration;
+using Microsoft.EntityFrameworkCore;
+using Aimsby.Domain.Entities;
+
+namespace Aimsby.Tests.TestSupport;
+
+/// <summary>Scriptable push sender: queue the outcome each call should produce.</summary>
+public class FakePushSender : IPushSender
+{
+    public bool IsConfigured { get; set; } = true;
+
+    /// <summary>Tokens the provider should report as permanently invalid.</summary>
+    public HashSet<string> InvalidTokens { get; } = new();
+
+    /// <summary>When false, every send fails with <see cref="FailureReason"/>.</summary>
+    public bool Succeeds { get; set; } = true;
+
+    public string FailureReason { get; set; } = "provider unavailable";
+
+    public int SendCount { get; private set; }
+    public List<string> SentBodies { get; } = new();
+
+    /// <summary>The title of every notification sent (not data-only messages), in order.</summary>
+    public List<string> SentTitles { get; } = new();
+
+    /// <summary>The data of every notification sent (not data-only messages), in order.</summary>
+    public List<IReadOnlyDictionary<string, string>?> SentNotificationData { get; } = new();
+
+    /// <summary>The Android channel of every notification sent (not data-only messages), in order.</summary>
+    public List<string> SentChannels { get; } = new();
+
+    /// <summary>The tag of every notification sent (not data-only messages), in order.</summary>
+    public List<string?> SentTags { get; } = new();
+
+    /// <summary>Every data-only payload sent, in order.</summary>
+    public List<IReadOnlyDictionary<string, string>> SentData { get; } = new();
+
+    public Task<IReadOnlyList<PushResult>> SendAsync(
+        IReadOnlyList<string> tokens,
+        string title,
+        string body,
+        IReadOnlyDictionary<string, string>? data = null,
+        string channel = PushChannels.Reminders,
+        string? tag = null,
+        CancellationToken ct = default)
+    {
+        SendCount++;
+        SentTags.Add(tag);
+        SentBodies.Add(body);
+        SentTitles.Add(title);
+        SentNotificationData.Add(data);
+        SentChannels.Add(channel);
+        return Task.FromResult(ResultsFor(tokens));
+    }
+
+    public Task<IReadOnlyList<PushResult>> SendDataAsync(
+        IReadOnlyList<string> tokens,
+        IReadOnlyDictionary<string, string> data,
+        CancellationToken ct = default)
+    {
+        SendCount++;
+        SentData.Add(data);
+        // Reminder payloads carry their text as "message"; recording it keeps assertions that
+        // check what was sent working whichever kind of send produced it.
+        if (data.TryGetValue("message", out var message)) SentBodies.Add(message);
+        return Task.FromResult(ResultsFor(tokens));
+    }
+
+    private IReadOnlyList<PushResult> ResultsFor(IReadOnlyList<string> tokens)
+    {
+        IReadOnlyList<PushResult> results = tokens.Select(t =>
+            InvalidTokens.Contains(t)
+                ? new PushResult(t, Success: false, TokenInvalid: true, Error: "unregistered token")
+                : Succeeds
+                    ? new PushResult(t, Success: true)
+                    : new PushResult(t, Success: false, Error: FailureReason))
+            .ToList();
+
+        return results;
+    }
+}
+
+/// <summary>
+/// Scriptable AI streamer: each queued round is the chunk sequence one model
+/// call should emit, letting tests drive the tool loop deterministically.
+/// </summary>
+public class FakeAiMessageStreamer : IAiMessageStreamer
+{
+    private readonly Queue<IReadOnlyList<AiStreamChunk>> _rounds = new();
+
+    /// <summary>Turns passed in on each call, so tests can assert what the model saw.</summary>
+    public List<IReadOnlyList<AiChatTurn>> ReceivedTurns { get; } = new();
+
+    public List<IReadOnlyList<AiToolDefinition>> ReceivedTools { get; } = new();
+
+    public Exception? ThrowOnFirstCall { get; set; }
+
+    /// <summary>Fails the given call (1-based) — e.g. a corrective round after a good first reply.</summary>
+    public (int Call, Exception Error)? ThrowOnCall { get; set; }
+
+    public int CallCount { get; private set; }
+
+    public FakeAiMessageStreamer EnqueueText(string text, long inputTokens = 10, long outputTokens = 5) =>
+        Enqueue([
+            new AiStreamChunk(InputTokens: inputTokens),
+            new AiStreamChunk(TextDelta: text),
+            new AiStreamChunk(OutputTokens: outputTokens),
+        ]);
+
+    public FakeAiMessageStreamer EnqueueToolCall(string id, string name, string inputJson, string? text = null)
+    {
+        var chunks = new List<AiStreamChunk> { new(InputTokens: 10) };
+        if (text is not null) chunks.Add(new AiStreamChunk(TextDelta: text));
+        chunks.Add(new AiStreamChunk(ToolCall: new AiToolCall(id, name, inputJson)));
+        chunks.Add(new AiStreamChunk(OutputTokens: 5, StopReason: AiStopReasons.ToolUse));
+        return Enqueue(chunks);
+    }
+
+    public FakeAiMessageStreamer Enqueue(IReadOnlyList<AiStreamChunk> chunks)
+    {
+        _rounds.Enqueue(chunks);
+        return this;
+    }
+
+    /// <summary>Every request as received, so tests can assert the prompt and model options.</summary>
+    public List<AiRequest> ReceivedRequests { get; } = new();
+
+    /// <summary>
+    /// Waits this long before each round's first chunk, to exercise the idle timeout;
+    /// <see cref="Timeout.InfiniteTimeSpan"/> waits until cancelled.
+    /// </summary>
+    public TimeSpan DelayBeforeFirstChunk { get; set; }
+
+    private readonly Queue<string> _structured = new();
+
+    /// <summary>
+    /// Requests for data under a schema (the intent check), kept apart from the chat rounds: they
+    /// are not counted in <see cref="CallCount"/> or <see cref="ReceivedTurns"/>, so a test scripts
+    /// the conversation as before and opts in to the classification it wants.
+    /// </summary>
+    public List<AiRequest> ReceivedStructuredRequests { get; } = new();
+
+    /// <summary>What the next request under a schema answers; unscripted ones get "{}", which reads as no answer.</summary>
+    public FakeAiMessageStreamer EnqueueStructured(string json)
+    {
+        _structured.Enqueue(json);
+        return this;
+    }
+
+    /// <summary>The intent check answers <paramref name="intent"/>.</summary>
+    public FakeAiMessageStreamer EnqueueIntent(string intent) => EnqueueStructured($$"""{"intent":"{{intent}}"}""");
+
+    public async IAsyncEnumerable<AiStreamChunk> StreamAsync(
+        AiRequest request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        if (request.ResponseSchemaJson is not null)
+        {
+            ReceivedStructuredRequests.Add(request);
+            await Task.Yield();
+            yield return new AiStreamChunk(TextDelta: _structured.Count > 0 ? _structured.Dequeue() : "{}");
+            yield break;
+        }
+
+        CallCount++;
+        // Snapshot: ChatService mutates its list between rounds.
+        ReceivedTurns.Add(request.Turns.ToList());
+        ReceivedTools.Add(request.Tools.ToList());
+        ReceivedRequests.Add(request with { Turns = request.Turns.ToList() });
+
+        if (DelayBeforeFirstChunk != TimeSpan.Zero) await Task.Delay(DelayBeforeFirstChunk, ct);
+
+        if (ThrowOnFirstCall is not null && CallCount == 1)
+        {
+            throw ThrowOnFirstCall;
+        }
+
+        if (ThrowOnCall is { } failure && failure.Call == CallCount)
+        {
+            throw failure.Error;
+        }
+
+        var chunks = _rounds.Count > 0
+            ? _rounds.Dequeue()
+            : [new AiStreamChunk(TextDelta: "done")];
+
+        foreach (var chunk in chunks)
+        {
+            ct.ThrowIfCancellationRequested();
+            yield return chunk;
+            await Task.Yield();
+        }
+    }
+}
+
+/// <summary>Factory that always returns the one streamer it wraps, regardless of provider.</summary>
+public class FakeAiMessageStreamerFactory(IAiMessageStreamer streamer) : IAiMessageStreamerFactory
+{
+    public IAiMessageStreamer ForProvider(string provider) => streamer;
+}
+
+/// <summary>Returns a fixed system prompt so prompt content doesn't couple chat tests.</summary>
+public class FakeSystemPromptBuilder(string prompt = "You are a test assistant.") : ISystemPromptBuilder
+{
+    public Task<string> BuildAsync(PromptRequest? request = null, CancellationToken ct = default) => Task.FromResult(prompt);
+}
+
+/// <summary>Minimal config service over the in-memory context.</summary>
+public class FakeInstanceConfigService(TestDbContext db, string? apiKey = "sk-ant-test") : IInstanceConfigService
+{
+    public async Task<InstanceConfig> GetOrCreateAsync(CancellationToken ct = default)
+    {
+        var config = await db.InstanceConfig.FirstOrDefaultAsync(ct);
+        if (config is not null) return config;
+
+        config = new InstanceConfig
+        {
+            Id = InstanceConfig.SingletonId,
+            IsConfigured = true,
+            AssistantNickname = "Friday",
+            TimeZone = "UTC",
+            AiModel = "claude-opus-4-8",
+            Features = InstanceConfig.DefaultFeatures(),
+        };
+        db.InstanceConfig.Add(config);
+        await db.SaveChangesAsync(ct);
+        return config;
+    }
+
+    public async Task UpdateAsync(Action<InstanceConfig> apply, CancellationToken ct = default)
+    {
+        var config = await GetOrCreateAsync(ct);
+        apply(config);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public Task SetAnthropicApiKeyAsync(string apiKey, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<string?> GetAnthropicApiKeyAsync(CancellationToken ct = default) => Task.FromResult(apiKey);
+}
+
+/// <summary>A tool that records its invocations and returns a canned result.</summary>
+public class FakeTool(
+    string name,
+    string result = "{\"ok\":true}",
+    string? requiredFeature = null,
+    bool mutates = false) : Aimsby.Application.Ai.Tools.IPersonaTool
+{
+    public string Name { get; } = name;
+    public string Description => $"Fake {Name} tool.";
+    public string InputSchemaJson => """{"type":"object","properties":{}}""";
+    public string? RequiredFeature { get; } = requiredFeature;
+
+    /// <summary>
+    /// Defaults to false so a test that just wants a tool to run says so by saying nothing.
+    /// Pass true to exercise the confirmation gate.
+    /// </summary>
+    public bool Mutates { get; } = mutates;
+
+    public List<string> Invocations { get; } = new();
+
+    /// <summary>
+    /// Set to make the pre-proposal check refuse the call, the way a tool does when the item it
+    /// names does not exist.
+    /// </summary>
+    public string? ValidationError { get; set; }
+
+    public Task<string> ExecuteAsync(System.Text.Json.JsonElement input, CancellationToken ct = default)
+    {
+        Invocations.Add(input.ToString());
+        return Task.FromResult(result);
+    }
+
+    public Task ValidateAsync(System.Text.Json.JsonElement input, CancellationToken ct = default) =>
+        ValidationError is null
+            ? Task.CompletedTask
+            : throw new Aimsby.Application.Goals.GoalValidationException(ValidationError);
+}
+
+/// <summary>Clock frozen at a fixed instant so scheduling tests never depend on wall time.</summary>
+public class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+{
+    public DateTimeOffset Now { get; set; } = now;
+
+    public override DateTimeOffset GetUtcNow() => Now;
+}
+
+/// <summary>
+/// Reversible stand-in for the real hasher: "hash" is just a prefixed copy of the
+/// password, so tests can assert on rehashing without running a KDF. Set
+/// <see cref="NextVerifyResult"/> to script the outcome of the next Verify call.
+/// </summary>
+public class FakePasswordHasher : IPasswordHasher
+{
+    private const string Prefix = "hashed:";
+
+    public PasswordVerifyResult? NextVerifyResult { get; set; }
+    public List<string> Hashed { get; } = new();
+
+    public string Hash(string password)
+    {
+        Hashed.Add(password);
+        return Prefix + password;
+    }
+
+    public PasswordVerifyResult Verify(string hash, string password)
+    {
+        if (NextVerifyResult is { } scripted) return scripted;
+        return hash == Prefix + password ? PasswordVerifyResult.Success : PasswordVerifyResult.Failed;
+    }
+}
+
+/// <summary>Token generator that records who it was asked to issue for.</summary>
+public class FakeJwtTokenGenerator : IJwtTokenGenerator
+{
+    public List<AdminUser> Issued { get; } = new();
+
+    public TokenResult CreateToken(AdminUser admin)
+    {
+        Issued.Add(admin);
+        return new TokenResult($"token-for-{admin.Username}", DateTime.UtcNow.AddHours(12));
+    }
+}
+
+/// <summary>
+/// Reversible stand-in for Data Protection. Prefixes rather than passes through, so a test can
+/// tell that a value really was protected before it was stored.
+/// </summary>
+public class FakeSecretProtector : ISecretProtector
+{
+    private const string Prefix = "protected:";
+
+    public string Protect(string plaintext) => Prefix + plaintext;
+
+    public string Unprotect(string ciphertext) =>
+        ciphertext.StartsWith(Prefix, StringComparison.Ordinal)
+            ? ciphertext[Prefix.Length..]
+            : throw new InvalidOperationException("Not a value this protector produced.");
+}
+
+/// <summary>Records what the live push sender was pointed at, and can be told to reject a key.</summary>
+public class FakePushProviderConfigurator : IPushProviderConfigurator
+{
+    public List<string?> Applied { get; } = [];
+
+    /// <summary>When set, Configure throws this — simulates a key that is well-formed but will not load.</summary>
+    public Exception? FailWith { get; set; }
+
+    public string? Current => Applied.Count == 0 ? null : Applied[^1];
+
+    public void Configure(string? serviceAccountJson)
+    {
+        if (FailWith is not null && serviceAccountJson is not null) throw FailWith;
+        Applied.Add(serviceAccountJson);
+    }
+}
+
+/// <summary>In-memory blob store: keeps uploaded bytes in a dictionary keyed by storage name.</summary>
+public class FakeDocumentStorage : IDocumentStorage
+{
+    private readonly Dictionary<string, byte[]> _files = new();
+
+    public IReadOnlyDictionary<string, byte[]> Files => _files;
+
+    public Task<string> SaveAsync(Stream content, string extension, CancellationToken ct = default)
+    {
+        using var buffer = new MemoryStream();
+        content.CopyTo(buffer);
+        var name = $"{Guid.NewGuid():N}{extension}";
+        _files[name] = buffer.ToArray();
+        return Task.FromResult(name);
+    }
+
+    public Task<Stream?> OpenReadAsync(string storageName, CancellationToken ct = default) =>
+        Task.FromResult<Stream?>(_files.TryGetValue(storageName, out var bytes) ? new MemoryStream(bytes) : null);
+
+    public Task<string?> ReadTextAsync(string storageName, int maxCharacters, CancellationToken ct = default) =>
+        Task.FromResult<string?>(_files.TryGetValue(storageName, out var bytes)
+            ? System.Text.Encoding.UTF8.GetString(bytes)
+            : null);
+
+    public Task DeleteAsync(string storageName, CancellationToken ct = default)
+    {
+        _files.Remove(storageName);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>A logger that keeps what was logged, so a test can assert a warning was raised.</summary>
+public class ListLogger<T> : ILogger<T>
+{
+    public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+    public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+        Func<TState, Exception?, string> formatter) => Entries.Add((logLevel, formatter(state, exception)));
+}
+
+/// <summary>Prompt overrides held in memory, keyed by file name.</summary>
+public class FakePromptOverrides : IPromptOverrideSource
+{
+    public Dictionary<string, string> Files { get; } = [];
+
+    public string? Read(string fileName) => Files.GetValueOrDefault(fileName);
+}
+
+/// <summary>The real chat service with the real guards, over a scripted model and in-memory data.</summary>
+public static class TestChat
+{
+    public static ChatService Create(
+        TestDbContext db, IInstanceConfigService config, IAiMessageStreamer streamer, params IPersonaTool[] tools) =>
+        Create(db, config, streamer, TimeProvider.System, tools);
+
+    public static ChatService Create(
+        TestDbContext db, IInstanceConfigService config, IAiMessageStreamer streamer, TimeProvider time, params IPersonaTool[] tools) =>
+        Create(db, config, streamer, time, new ChatContext(), tools);
+
+    public static ChatService Create(
+        TestDbContext db, IInstanceConfigService config, IAiMessageStreamer streamer, IChatContext chat, params IPersonaTool[] tools) =>
+        Create(db, config, streamer, TimeProvider.System, chat, tools);
+
+    public static ChatService Create(
+        TestDbContext db, IInstanceConfigService config, IAiMessageStreamer streamer, TimeProvider time, IChatContext chat, params IPersonaTool[] tools)
+    {
+        var registry = new PersonaToolRegistry(tools, config, NullLogger<PersonaToolRegistry>.Instance);
+        return new ChatService(
+            db, config, new FakeSystemPromptBuilder(), new FakeAiMessageStreamerFactory(streamer), registry,
+            new ToolCallPipeline(registry, NullLogger<ToolCallPipeline>.Instance),
+            new ReplyPipeline(db, NullLogger<ReplyPipeline>.Instance),
+            new Aimsby.Application.Ai.History.ConversationSummarizer(
+                TestPrompts.Library(), NullLogger<Aimsby.Application.Ai.History.ConversationSummarizer>.Instance),
+            time,
+            chat,
+            new Aimsby.Application.Ai.Intents.IntentClassifier(NullLogger<Aimsby.Application.Ai.Intents.IntentClassifier>.Instance),
+            NullLogger<ChatService>.Instance);
+    }
+}
+
+/// <summary>Briefs go out as composed: the default, and what every brief test not about rewording wants.</summary>
+public class NoBriefPhraser : Aimsby.Application.Proactive.IBriefPhraser
+{
+    public Task<string?> PhraseAsync(InstanceConfig config, string brief, CancellationToken ct = default) =>
+        Task.FromResult<string?>(null);
+}
+
+/// <summary>The real prompt library over the shipped fragments, as the app runs it.</summary>
+public static class TestPrompts
+{
+    public static IPromptLibrary Library(IPromptOverrideSource? overrides = null) =>
+        new PromptLibrary(overrides ?? new NoPromptOverrides(), new ListLogger<PromptLibrary>());
+}
+
+/// <summary>Releases as a test sets them; nothing is fetched.</summary>
+public class FakeReleaseFeed(params ReleaseInfo[] releases) : IReleaseFeed
+{
+    public List<ReleaseInfo> Releases { get; } = [.. releases];
+
+    public Task<IReadOnlyList<ReleaseInfo>> GetReleasesAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ReleaseInfo>>(Releases);
+
+    public static ReleaseInfo Release(string version, bool prerelease = false) =>
+        new(version, $"v{version}", $"https://github.com/x/y/releases/tag/v{version}", prerelease, DateTimeOffset.UnixEpoch, null);
+
+    /// <summary>A phone app release (tag "mobile-v…") with its APK.</summary>
+    public static ReleaseInfo AppRelease(string version, bool prerelease = false) =>
+        new(version, $"mobile-v{version}", $"https://github.com/x/y/releases/tag/mobile-v{version}", prerelease,
+            DateTimeOffset.UnixEpoch, $"https://github.com/x/y/releases/download/mobile-v{version}/app.apk", IsApp: true);
+}
+
+/// <summary>An updater that records what it was asked for; <see cref="Status"/> null means none is set up.</summary>
+public class FakeUpdater : IUpdater
+{
+    public UpdaterStatus? Status { get; set; }
+
+    public List<string> Requested { get; } = [];
+
+    public Task<UpdaterStatus?> GetStatusAsync(CancellationToken ct = default) => Task.FromResult(Status);
+
+    public Task<string> RequestAsync(string version, CancellationToken ct = default)
+    {
+        Requested.Add(version);
+        Status = Status! with { RequestId = $"r{Requested.Count}", Version = version, State = "requested" };
+        return Task.FromResult($"r{Requested.Count}");
+    }
+}
+
+/// <summary>An Ollama that answers only at the addresses it is given, with the models it is given.</summary>
+public class FakeLocalModelHost(params string[] answersAt) : ILocalModelHost
+{
+    public HashSet<string> Models { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> Probed { get; } = [];
+    public List<string> Pulled { get; } = [];
+
+    public Task<LocalHostInfo?> DetectAsync(string address, CancellationToken ct = default)
+    {
+        Probed.Add(address);
+        return Task.FromResult(answersAt.Contains(address) ? new LocalHostInfo(address, "0.40.14") : null);
+    }
+
+    public Task<bool> HasModelAsync(string address, string model, CancellationToken ct = default) =>
+        Task.FromResult(Models.Contains(model));
+
+    public async IAsyncEnumerable<ModelPullProgress> PullAsync(
+        string address, string model, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        Pulled.Add(model);
+        yield return new ModelPullProgress("pulling manifest", null, null);
+        yield return new ModelPullProgress("pulling 1a2b", 50, 100);
+        yield return new ModelPullProgress("success", null, null);
+        Models.Add(model);
+        await Task.CompletedTask;
+    }
+
+    public List<(string Source, string Destination)> Copied { get; } = [];
+
+    public Task CopyModelAsync(string address, string source, string destination, CancellationToken ct = default)
+    {
+        Copied.Add((source, destination));
+        Models.Add(destination);
+        return Task.CompletedTask;
+    }
+}

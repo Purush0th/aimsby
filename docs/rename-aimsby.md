@@ -1,6 +1,6 @@
 # Rename plan: PersonaOS → Aimsby
 
-_Written 2026-11-16. Owner decision: "Aimsby it is". Nothing renamed yet. Status lives in TODO.md._
+_Written 2026-11-16. Owner decision: "Aimsby it is". Phases 1-3 done in code on `rename/aimsby` (2026-11-16). Status lives in TODO.md._
 
 ## Why Aimsby, and what was checked
 "PersonaOS" is taken. Aimsby (aims + "-by", like a small English place name) was checked on
@@ -8,8 +8,11 @@ _Written 2026-11-16. Owner decision: "Aimsby it is". Nothing renamed yet. Status
 - **Clear:** USPTO (0 records, sound-alikes included), TMview (no rows), Apple App Store (US, UK and
   India), GitHub, npm, PyPI and Docker Hub. The .com, .ai, .io, .app and .dev domains were free.
   Instagram @aimsby is a private person, so no conflict.
-- **Not checked from this machine:** Google Play, and India's trademark register (classes 9 and 42).
-  The owner checks these before Phase 1.
+- **Google Play (partial, 2026-11-16):** a web search limited to play.google.com shows no Aimsby
+  (nearest: AIMS, Aimsio, AIMSIS, AimyMe). play.google.com itself doesn't resolve from this machine,
+  so the owner confirms with a search in the Play Store app.
+- **Not checked from this machine:** India's trademark register (classes 9 and 42; the search has a
+  CAPTCHA). The owner checks it before Phase 1.
 Full research: the rename-research memory and `docs/decisions.md`.
 
 ## Spellings

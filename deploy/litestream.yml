@@ -1,6 +1,9 @@
 # Litestream configuration (used only by docker-compose.litestream.yml).
 # Values come from the environment — set the LITESTREAM_* keys in your .env.
 # Docs: https://litestream.io/reference/config/
+#
+# Legacy ids, kept on purpose from before the rename to Aimsby: the database file name, and the
+# replica's folder in the bucket (a new name would start a new, empty replica).
 dbs:
   - path: /app/data/personaos.db
     replicas:

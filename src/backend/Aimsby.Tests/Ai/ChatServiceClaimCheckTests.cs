@@ -1,0 +1,442 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Aimsby.Application.Ai;
+using Aimsby.Application.Ai.Guards;
+using Aimsby.Application.Ai.Tools;
+using Aimsby.Application.Common.Interfaces;
+using Aimsby.Domain.Entities;
+using Aimsby.Tests.TestSupport;
+
+namespace Aimsby.Tests.Ai;
+
+/// <summary>
+/// A reply that says a change was made when no tool made one. The model gets one corrective
+/// round; if the claim survives, the reply is flagged so the client can say nothing was saved.
+/// Scripted with the real failure: "I've set a reminder…" with no <c>create_reminder</c> call.
+/// </summary>
+public class ChatServiceClaimCheckTests
+{
+    private const string FalseClaim = "I've set a reminder to remind you to submit the report at 19:00 today.";
+
+    private static (TestDbContext Db, ChatService Chat, FakeAiMessageStreamer Streamer) Setup(params IPersonaTool[] tools)
+    {
+        var db = TestDbContext.Create();
+        var config = new FakeInstanceConfigService(db);
+        var streamer = new FakeAiMessageStreamer();
+        // The messages say "today" and the calls carry 2026-09-15: the clock agrees with them.
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 9, 15, 8, 0, 0, TimeSpan.Zero));
+        return (db, TestChat.Create(db, config, streamer, clock, tools), streamer);
+    }
+
+    private static async Task<List<ChatStreamEvent>> CollectAsync(IAsyncEnumerable<ChatStreamEvent> stream)
+    {
+        var events = new List<ChatStreamEvent>();
+        await foreach (var evt in stream) events.Add(evt);
+        return events;
+    }
+
+    [Fact]
+    public async Task A_plain_sum_makes_no_card_and_saves_nothing()
+    {
+        // The trained qwen2.5:3b answered 50 and proposed a task (training run 2026-11-06b, bench-4).
+        var tasks = new FakeTool("create_task", mutates: true);
+        var (_, chat, streamer) = Setup(tasks);
+        streamer
+            .EnqueueToolCall("toolu_1", "create_task", """{"title":"Calculate 20% of 250"}""")
+            .EnqueueText("20% of 250 is 50.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "How much is 20% of 250?"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Empty(done.Pending ?? []);
+        Assert.Empty(tasks.Invocations);
+    }
+
+    [Fact]
+    public async Task Am_i_free_unread_is_read_and_answered_from_the_planner()
+    {
+        // The trained qwen2.5:3b answered "I don't have your planner items for today" with no read
+        // (training run 2026-11-06b, bench-2). 2026-09-15 is a Tuesday; Saturday is the 19th.
+        var planner = new FakeTool("get_planner", """{"items":[]}""");
+        var (db, chat, streamer) = Setup(planner);
+        db.PlannerItems.Add(new PlannerItem { Title = "Pottery class", Date = new DateOnly(2026, 9, 19), ScheduledTime = new TimeOnly(14, 0) });
+        db.PlannerItems.Add(new PlannerItem { Title = "Breakfast with Ana", Date = new DateOnly(2026, 9, 19), ScheduledTime = new TimeOnly(9, 0) });
+        await db.SaveChangesAsync();
+        streamer.EnqueueText("I don't have your planner items for today.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Am I free on Saturday afternoon?"));
+
+        // Answered before the model is asked, so nothing streams in only to be swapped out
+        // (owner's chat 4nzrb5af, 2026-11-07).
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Equal(["""{"date":"2026-09-19"}"""], planner.Invocations);
+        Assert.Equal("On Saturday 19 September in the afternoon you have “Pottery class” at 14:00.",
+            string.Concat(events.Where(e => e.Type == "delta").Select(e => e.Text)));
+        Assert.Null(done.Text);
+        Assert.Equal(0, streamer.CallCount);
+    }
+
+    [Fact]
+    public async Task When_is_my_x_finds_another_ending_of_the_word_before_the_model_is_asked()
+    {
+        // Owner's chat 4nzrb5af (2026-11-07): "when i will be commuting?" got "I couldn't find
+        // anything about “commuting”" with "Commute" in the planner, after the model's own reply
+        // had streamed in.
+        var (db, chat, streamer) = Setup(new FakeTool("get_planner", """{"items":[]}"""));
+        db.PlannerItems.Add(new PlannerItem { Title = "Commute", Date = new DateOnly(2026, 9, 15), ScheduledTime = new TimeOnly(8, 45) });
+        db.PlannerItems.Add(new PlannerItem { Title = "Commute home", Date = new DateOnly(2026, 9, 15), ScheduledTime = new TimeOnly(19, 50) });
+        await db.SaveChangesAsync();
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "when i will be commuting?"));
+
+        var reply = string.Concat(events.Where(e => e.Type == "delta").Select(e => e.Text));
+        Assert.Contains("“Commute” at 08:45", reply, StringComparison.Ordinal);
+        Assert.Contains("“Commute home” at 19:50", reply, StringComparison.Ordinal);
+        Assert.Equal(0, streamer.CallCount);
+    }
+
+    [Fact]
+    public async Task A_task_with_nothing_said_about_it_is_answered_with_a_question()
+    {
+        // qwen2.5:3b answered "Make a task" with an instruction, not a question (holdout, 2026-11-06).
+        var tasks = new FakeTool("create_task", mutates: true);
+        var (_, chat, streamer) = Setup(tasks);
+        streamer.EnqueueText("Please provide a title for the task.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Make a task"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.StartsWith("What should the task be?", done.Text);
+        Assert.Empty(tasks.Invocations);
+    }
+
+    [Fact]
+    public async Task A_question_back_about_a_bare_task_is_kept()
+    {
+        var (_, chat, streamer) = Setup(new FakeTool("create_task", mutates: true));
+        streamer.EnqueueText("Sure, what would you like the task to be?");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Make a task"));
+
+        // Left as streamed: the done event carries no rewritten text.
+        Assert.Null(Assert.Single(events, e => e.Type == "done").Text);
+        Assert.Equal("Sure, what would you like the task to be?", string.Concat(events.Where(e => e.Type == "delta").Select(e => e.Text)));
+    }
+
+    [Fact]
+    public async Task A_claim_the_model_turns_into_a_proposal_ends_as_a_real_card()
+    {
+        var reminder = new FakeTool("create_reminder", mutates: true);
+        var (db, chat, streamer) = Setup(reminder);
+        streamer
+            .EnqueueText(FalseClaim)
+            // Told nothing was saved, it now calls the tool — which becomes a proposal.
+            .EnqueueToolCall("toolu_1", "create_reminder", """{"message":"Submit the report","dueAtLocal":"2026-09-15T19:00"}""")
+            .EnqueueText("I'd like to set that reminder for 19:00 — please confirm it below.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me to submit the report at 7pm today"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.NotNull(done.Pending);
+        Assert.Single(done.Pending!);
+        Assert.Null(done.UnverifiedClaim);
+        // The stored reply replaces the false claim the user watched stream in.
+        Assert.Equal("I'd like to set that reminder for 19:00 — please confirm it below.", done.Text);
+        Assert.Empty(reminder.Invocations); // still gated — nothing ran without confirmation
+
+        var stored = await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant);
+        Assert.DoesNotContain("I've set a reminder", stored.Content);
+        Assert.False(stored.UnverifiedClaim);
+    }
+
+    [Fact]
+    public async Task A_routine_for_the_calendar_becomes_one_card_a_row_whatever_the_model_made()
+    {
+        // Production chat, 2026-11-03: a pasted routine became board tasks and a goal nobody named.
+        var (_, chat, streamer) = Setup(new FakeTool("add_planner_item", mutates: true), new FakeTool("create_task", mutates: true));
+        streamer
+            .EnqueueToolCall("toolu_1", "create_task", """{"title":"Wake up, make bed"}""")
+            .EnqueueText("I have proposed a new goal and a task.");
+        const string routine = """
+            Block my calendar daily till Dec 31 with this, no notifications
+            6:00–6:05	Wake up, make bed
+            12:45–1:10	Lunch
+            1:10–1:15	Transition
+            """;
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, routine));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Equal(3, done.Pending!.Count);
+        Assert.All(done.Pending!, p => Assert.Equal("add_planner_item", p.Tool));
+        Assert.Contains(done.Pending!, p => p.Summary.Contains("Transition") && p.Summary.Contains("13:10"));
+        // The clock says 08:00, after the first row, so the routine starts the next day.
+        Assert.Equal("Here are 3 items for your calendar from 16 Sep, repeating daily until 31 Dec 2026, with no notifications. Confirm them below if they look right.", done.Text);
+    }
+
+    [Fact]
+    public async Task A_claim_the_model_takes_back_is_replaced_and_not_flagged()
+    {
+        var (db, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer
+            .EnqueueText(FalseClaim)
+            .EnqueueText("I haven't set anything yet. Would you like me to create that reminder for 19:00?");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me to submit the report at 7pm"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Null(done.UnverifiedClaim);
+        Assert.StartsWith("I haven't set anything yet.", done.Text);
+        Assert.False((await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant)).UnverifiedClaim);
+    }
+
+    [Fact]
+    public async Task A_claim_that_survives_correction_is_said_honestly_without_a_warning()
+    {
+        // Owner, 2026-11-07: no "nothing was saved" note under a false claim; the reply itself
+        // says the change was not made and offers to make it.
+        var (db, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer
+            .EnqueueText(FalseClaim)
+            .EnqueueText("Your reminder has been set for 19:00.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me at 7pm"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Null(done.Pending);
+        Assert.Equal("I haven't made that change yet. Want me to go ahead?", done.Text);
+
+        var stored = await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant);
+        Assert.False(stored.UnverifiedClaim);
+        Assert.Equal(done.Text, stored.Content);
+    }
+
+    [Fact]
+    public async Task A_reply_stored_with_the_old_warning_is_shown_honestly()
+    {
+        var (db, chat, _) = Setup();
+        var conversation = new Conversation { Title = "Old" };
+        db.Conversations.Add(conversation);
+        await db.SaveChangesAsync();
+        db.ChatMessages.Add(new ChatMessage { ConversationId = conversation.Id, Role = ChatRoles.Assistant, Content = FalseClaim + " Anything else?", UnverifiedClaim = true });
+        await db.SaveChangesAsync();
+
+        var detail = await chat.GetConversationAsync(conversation.Id.ToString());
+
+        var shown = detail!.Messages.Single(m => m.Role == ChatRoles.Assistant);
+        Assert.False(shown.UnverifiedClaim);
+        Assert.Equal("I haven't made that change yet.\n\nAnything else?", shown.Content);
+    }
+
+    [Fact]
+    public async Task The_correction_request_says_what_was_claimed_and_is_never_stored()
+    {
+        var (db, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer.EnqueueText(FalseClaim).EnqueueText("I haven't done that yet — shall I?");
+
+        await CollectAsync(chat.StreamChatAsync(null, "Remind me at 7pm"));
+
+        // The corrective round received the false claim and a request naming it.
+        var correctionTurns = streamer.ReceivedTurns[1];
+        Assert.Contains(correctionTurns, t => t.Role == ChatRoles.User && t.Content.Contains("did not call any tool"));
+        Assert.Contains(correctionTurns, t => t.Content.Contains("I've set a reminder"));
+
+        // Only the user's message and the final reply are kept — never the nudge.
+        var stored = await db.ChatMessages.OrderBy(m => m.Id).Select(m => m.Content).ToListAsync();
+        Assert.Equal(2, stored.Count);
+        Assert.DoesNotContain(stored, c => c.Contains("did not call any tool"));
+    }
+
+    [Fact]
+    public async Task An_honest_reply_costs_no_extra_round()
+    {
+        var (_, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer.EnqueueText("I can set a reminder for 7pm if you like.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Can you remind me at 7pm?"));
+
+        Assert.Equal(1, streamer.CallCount);
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Null(done.Text);
+    }
+
+    [Fact]
+    public async Task A_reply_describing_a_real_proposal_is_not_second_guessed()
+    {
+        // "I've set up a reminder for you to confirm" is honest when a proposal exists this turn.
+        var (_, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer
+            .EnqueueToolCall("toolu_1", "create_reminder", """{"message":"Stretch"}""")
+            .EnqueueText("I've added a reminder to stretch — it's waiting for you below.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me to stretch at 5pm"));
+
+        Assert.Equal(2, streamer.CallCount); // the tool round and its reply — no correction
+        Assert.Null(Assert.Single(events, e => e.Type == "done").UnverifiedClaim);
+    }
+
+    [Fact]
+    public async Task A_done_claim_above_a_waiting_card_is_rewritten_as_a_proposal()
+    {
+        // 2026-09-22, qwen2.5:3b-instruct: "I've created a goal called Learn Rust" above a card
+        // the user had not confirmed.
+        var goals = new FakeTool("create_goal", mutates: true);
+        var (_, chat, streamer) = Setup(goals);
+        streamer
+            .EnqueueToolCall("toolu_1", "create_goal", """{"title":"Learn Rust"}""")
+            .EnqueueText("I've created a goal called Learn Rust for you.")
+            .EnqueueText("Here is Learn Rust as a monthly goal — confirm the card below to add it.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Create a goal called Learn Rust this month"));
+
+        Assert.Equal(3, streamer.CallCount);
+        Assert.Contains(streamer.ReceivedTurns[2], t => t.Role == ChatRoles.User && t.Content.Contains("waiting for the user to tap"));
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Equal("Here is Learn Rust as a monthly goal — confirm the card below to add it.", done.Text);
+        Assert.Single(done.Pending!);
+        // The card is right there: no "nothing was saved" note on top of it.
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Empty(goals.Invocations);
+    }
+
+    [Fact]
+    public async Task A_done_claim_that_survives_the_correction_is_taken_out_of_the_reply()
+    {
+        // Seen live: qwen2.5:3b-instruct repeated the claim word for word when asked to correct it.
+        const string claim = "I've created a new goal titled Learn Rust for this month.";
+        var (db, chat, streamer) = Setup(new FakeTool("create_goal", mutates: true));
+        streamer
+            .EnqueueToolCall("toolu_1", "create_goal", """{"title":"Learn Rust"}""")
+            .EnqueueText(claim + " You'll see a card with the details.")
+            .EnqueueText(claim + " You'll see a card with the details.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Create a goal called Learn Rust this month"));
+
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Equal(EmptyReplyGuard.ProposalOnly + " You'll see a card with the details.", done.Text);
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Equal(done.Text, (await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant)).Content);
+    }
+
+    [Fact]
+    public async Task A_reply_naming_items_that_do_not_exist_says_so_and_keeps_it()
+    {
+        var (db, chat, streamer) = Setup();
+        streamer.EnqueueText("TASK-6 is already done, and TASK-7 is next.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Anything in the todo?"));
+
+        Assert.Equal(["TASK-6", "TASK-7"], Assert.Single(events, e => e.Type == "done").UnknownItems);
+        var stored = await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant);
+        Assert.Equal("TASK-6,TASK-7", stored.UnknownItems);
+        var detail = await chat.GetConversationAsync(stored.ConversationId.ToString());
+        Assert.Equal(["TASK-6", "TASK-7"], detail!.Messages.Single(m => m.Role == ChatRoles.Assistant).UnknownItems);
+    }
+
+    [Fact]
+    public async Task A_failed_correction_still_ends_honestly_without_an_error()
+    {
+        var (db, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer.EnqueueText(FalseClaim);
+        streamer.ThrowOnCall = (2, new AiStreamException("The provider is unavailable."));
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me at 7pm"));
+
+        Assert.DoesNotContain(events, e => e.Type == "error");
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Equal("I haven't made that change yet. Want me to go ahead?",
+            (await db.ChatMessages.SingleAsync(m => m.Role == ChatRoles.Assistant)).Content);
+    }
+
+    [Fact]
+    public async Task The_correction_names_the_tool_the_claim_needs_and_the_users_words()
+    {
+        // Chat dawdsabu (owner, 2026-10-11): told only to "call the right tool", qwen2.5:3b said
+        // "I have scheduled a reminder" again.
+        var (_, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer.EnqueueText(FalseClaim).EnqueueText("I haven't done that yet — shall I?");
+
+        await CollectAsync(chat.StreamChatAsync(null, "Remind me to submit the report at 7pm"));
+
+        var correction = streamer.ReceivedTurns[1][^1].Content;
+        Assert.Contains("call create_reminder now", correction);
+        Assert.Contains("Remind me to submit the report at 7pm", correction);
+    }
+
+    [Fact]
+    public async Task A_claim_that_survives_the_correction_gets_one_try_offered_only_its_tool()
+    {
+        var reminder = new FakeTool("create_reminder", mutates: true);
+        var (_, chat, streamer) = Setup(reminder, new FakeTool("get_goals"), new FakeTool("create_goal", mutates: true));
+        streamer
+            .EnqueueText(FalseClaim)
+            .EnqueueText("Your reminder has been set for 19:00.")
+            .EnqueueToolCall("toolu_1", "create_reminder", """{"message":"Submit the report","dueAtLocal":"2026-09-15T19:00"}""")
+            .EnqueueText("Done.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me to submit the report at 7pm"));
+
+        Assert.Equal(["create_reminder"], streamer.ReceivedTools[2].Select(t => t.Name));
+        var done = Assert.Single(events, e => e.Type == "done");
+        Assert.Single(done.Pending!);
+        Assert.Null(done.UnverifiedClaim);
+        Assert.Equal(EmptyReplyGuard.ProposalOnly, done.Text);
+        Assert.Empty(reminder.Invocations); // A card, not a change: still waiting for Confirm.
+    }
+
+    [Fact]
+    public async Task A_reply_that_proposes_with_no_card_is_corrected()
+    {
+        // Replaying chat dawdsabu: "I have proposed a reminder … waiting for your confirmation", no card.
+        var (_, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        streamer
+            .EnqueueText("I have proposed a reminder for you to submit the report at 7 PM. It is waiting for your confirmation.")
+            .EnqueueToolCall("toolu_1", "create_reminder", """{"message":"Submit the report","dueAtLocal":"2026-09-15T19:00"}""")
+            .EnqueueText("Here it is.");
+
+        var events = await CollectAsync(chat.StreamChatAsync(null, "Remind me to submit the report at 7pm"));
+
+        Assert.Single(Assert.Single(events, e => e.Type == "done").Pending!);
+    }
+
+    [Fact]
+    public async Task A_claim_a_reply_was_flagged_for_is_left_out_of_the_history()
+    {
+        // The model copied its own flagged "I have scheduled a reminder" three turns running (dawdsabu).
+        var (db, chat, streamer) = Setup(new FakeTool("create_reminder", mutates: true));
+        var conversation = new Conversation { Title = "Milk" };
+        db.Conversations.Add(conversation);
+        await db.SaveChangesAsync();
+        var at = new DateTime(2026, 9, 15, 7, 0, 0, DateTimeKind.Utc);
+        db.ChatMessages.AddRange(
+            new ChatMessage { ConversationId = conversation.Id, Role = ChatRoles.User, Content = "tomorrow 9 a.m.", CreatedAtUtc = at },
+            new ChatMessage
+            {
+                ConversationId = conversation.Id, Role = ChatRoles.Assistant, CreatedAtUtc = at.AddSeconds(1), UnverifiedClaim = true,
+                Content = "I have scheduled a reminder for you to buy milk at 9 AM tomorrow. Anything else?",
+            },
+            new ChatMessage { ConversationId = conversation.Id, Role = ChatRoles.User, Content = "Yes, add a reminder.", CreatedAtUtc = at.AddSeconds(2) },
+            new ChatMessage
+            {
+                ConversationId = conversation.Id, Role = ChatRoles.Assistant, CreatedAtUtc = at.AddSeconds(3), UnverifiedClaim = true,
+                Content = "I have scheduled a reminder for you to buy milk at 9 AM tomorrow.",
+            });
+        await db.SaveChangesAsync();
+        streamer.EnqueueText("Which time would you like?");
+
+        await CollectAsync(chat.StreamChatAsync(conversation.Id, "Remind me to buy milk tomorrow morning 9 a.m."));
+
+        var sent = streamer.ReceivedTurns[0];
+        Assert.DoesNotContain(sent, t => t.Content.Contains("I have scheduled"));
+        Assert.Contains(sent, t => t.Role == ChatRoles.Assistant && t.Content == "Anything else?");
+        // The reply that was nothing but the claim is not sent at all.
+        Assert.Equal(
+            [ChatRoles.User, ChatRoles.Assistant, ChatRoles.User, ChatRoles.User],
+            sent.Select(t => t.Role));
+        // Stored as it was: the user's history still shows what was said, with its warning.
+        Assert.Equal(2, await db.ChatMessages.CountAsync(m => m.Content.Contains("I have scheduled")));
+    }
+}

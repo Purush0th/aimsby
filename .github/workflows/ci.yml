@@ -16,23 +16,23 @@ jobs:
 
       # The build must stay at zero warnings; -warnaserror makes CI enforce it.
       - name: Build
-        run: dotnet build PersonaOS.slnx -c Release -warnaserror
+        run: dotnet build Aimsby.slnx -c Release -warnaserror
 
       - name: Test
-        run: dotnet test src/backend/PersonaOS.Tests -c Release --no-build
+        run: dotnet test src/backend/Aimsby.Tests -c Release --no-build
 
   web:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/frontend/PersonaOS.Web
+        working-directory: src/frontend/Aimsby.Web
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: src/frontend/PersonaOS.Web/package-lock.json
+          cache-dependency-path: src/frontend/Aimsby.Web/package-lock.json
       - run: npm ci
       - run: npx ng build --configuration production
 
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/frontend/PersonaOS.Mobile
+        working-directory: src/frontend/Aimsby.Mobile
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -56,14 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Build API image
-        run: docker build -f src/backend/Dockerfile -t personaos-api:ci .
+        run: docker build -f src/backend/Dockerfile -t aimsby-api:ci .
       - name: Build web image
-        run: docker build -t personaos-web:ci src/frontend/PersonaOS.Web
+        run: docker build -t aimsby-web:ci src/frontend/Aimsby.Web
       - name: Build updater image
-        run: docker build -t personaos-updater:ci deploy/updater
+        run: docker build -t aimsby-updater:ci deploy/updater
       # The release workflow publishes this one too; a broken build would only show at release.
       - name: Build whisper image
-        run: docker build -t personaos-whisper:ci deploy/speech/whisper
+        run: docker build -t aimsby-whisper:ci deploy/speech/whisper
 
   updater:
     # The updater installs releases on people's servers: its backup, rollback and refusals are

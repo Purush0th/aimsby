@@ -1,6 +1,6 @@
-# PersonaOS — Product Requirements & Architecture
+# Aimsby — Product Requirements & Architecture
 
-> **PersonaOS** is an open-source, self-hosted, single-user personal AI assistant.
+> **Aimsby** is an open-source, self-hosted, single-user personal AI assistant.
 > You run it on your own machine, bring your own AI provider key (or point it at a
 > local model), give your assistant any nickname you like — and it manages your goals,
 > a personal sprint board, a daily planner, reminders and memories through chat and voice.
@@ -32,9 +32,9 @@ A **truly private** personal assistant that is simple to use and still gets real
 
 | Thing | Rule |
 |---|---|
-| Product brand | **"PersonaOS"** — fixed everywhere: app stores, Docker images, GitHub, namespaces, marketing. Never changes. |
+| Product brand | **"Aimsby"** — fixed everywhere: app stores, Docker images, GitHub, namespaces, marketing. Never changes. |
 | Assistant nickname | Free-form, chosen at first-run setup. Only affects how the assistant refers to itself in chat and UI. |
-| Visual identity | Fixed PersonaOS theme and logo across all installs. No per-install theming. Light and dark follow the device unless the user picks one. |
+| Visual identity | Fixed Aimsby theme and logo across all installs. No per-install theming. Light and dark follow the device unless the user picks one. |
 | Persona/tone | Editable per install (formal / friendly / concise …), appended to the system prompt. |
 
 Nothing user-chosen (nickname, persona, API key, personal facts) is ever hardcoded — it all lives
@@ -292,7 +292,7 @@ metadata); the assistant does not read them.
 
 ### 3.7 Memory
 
-- Memory is server-side and available on every signed-in device through the PersonaOS API. The
+- Memory is server-side and available on every signed-in device through the Aimsby API. The
   database is the source of truth; clients keep no competing memory stores.
 - A memory is a concise, durable item: a preference, ongoing project context, a fact about the
   user or an explicit decision. Each memory has a **category** and, when it came from chat, a
@@ -375,7 +375,7 @@ Key decisions:
   fields), because a small model describes whatever it is given.
 - **Speech services (optional)**: speech-to-text and text-to-speech are ports in Application,
   independent of the chat model. **The API is the orchestrator**: the phone talks only to the
-  PersonaOS API, which calls the configured service. Adapters speak the OpenAI-style audio API
+  Aimsby API, which calls the configured service. Adapters speak the OpenAI-style audio API
   (`/v1/audio/transcriptions`, `/v1/audio/speech`), which self-hosted servers such as
   faster-whisper and Kokoro commonly offer. The core application does not depend on those
   services: `deploy/docker-compose.yml` ships them as the opt-in `speech` profile (a faster-whisper
@@ -438,7 +438,7 @@ clients to gate modules and to show "please update" when too old.
   container. Only the web container publishes a port, on loopback by default. Images build for
   x86-64 and ARM. `docker compose up` → Setup Wizard → working assistant.
 - **Channels**: public GitHub repo, versioned images on GHCR, GitHub Releases carrying the
-  compose file, Android APK and docs. Store listings later, under the PersonaOS brand.
+  compose file, Android APK and docs. Store listings later, under the Aimsby brand.
 - **Updates**: `docker compose pull && docker compose up -d`; migrations run automatically; data
   and settings are preserved; a previous version can be pinned for rollback. The web app shows
   an "update available" banner (GitHub Releases; notify only, never automatic). The API stays

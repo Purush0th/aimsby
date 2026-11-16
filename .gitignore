@@ -44,14 +44,14 @@ Thumbs.db
 .continueignore
 .taste-skill/
 
-# Local SQLite database (dev) + WAL sidecars, and runtime backup snapshots
+# Local SQLite database (dev) + WAL sidecars, and runtime backup snapshots (personaos.db keeps its name from before the rename to Aimsby)
 **/personaos.db
 **/personaos.db-wal
 **/personaos.db-shm
-src/backend/PersonaOS.Api/data/
+src/backend/Aimsby.Api/data/
 
 # Firebase client config: per-install, identifies the owner's own Firebase project.
-src/frontend/PersonaOS.Mobile/android/app/google-services.json
+src/frontend/Aimsby.Mobile/android/app/google-services.json
 
 # Local copies of the server data volume (hold the Data Protection keys): never commit
 data/backups/

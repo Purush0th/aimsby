@@ -1,0 +1,54 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Aimsby.Application.Common.Interfaces;
+using Aimsby.Domain.Entities;
+
+namespace Aimsby.Tests.TestSupport;
+
+/// <summary>
+/// In-memory implementation of the persistence port. Tests exercise Application
+/// services without touching Infrastructure or a real database.
+/// </summary>
+public class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options), IAppDbContext
+{
+    public DbSet<InstanceConfig> InstanceConfig => Set<InstanceConfig>();
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<UserProfile> UserProfile => Set<UserProfile>();
+    public DbSet<Goal> Goals => Set<Goal>();
+    public DbSet<BoardTask> BoardTasks => Set<BoardTask>();
+    public DbSet<Sprint> Sprints => Set<Sprint>();
+    public DbSet<WorkItemComment> WorkItemComments => Set<WorkItemComment>();
+    public DbSet<WorkItemAttachment> WorkItemAttachments => Set<WorkItemAttachment>();
+    public DbSet<PlannerItem> PlannerItems => Set<PlannerItem>();
+    public DbSet<PlannerOccurrence> PlannerOccurrences => Set<PlannerOccurrence>();
+    public DbSet<PlannerAlertLog> PlannerAlertLogs => Set<PlannerAlertLog>();
+    public DbSet<Reminder> Reminders => Set<Reminder>();
+    public DbSet<DeviceToken> DeviceTokens => Set<DeviceToken>();
+    public DbSet<ProactiveJobRun> ProactiveJobRuns => Set<ProactiveJobRun>();
+    public DbSet<PendingAction> PendingActions => Set<PendingAction>();
+    public DbSet<Memory> Memories => Set<Memory>();
+    public DbSet<Note> Notes => Set<Note>();
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+        base.SaveChangesAsync(cancellationToken);
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        // Mirror the production JSON mapping for the feature-toggle map.
+        modelBuilder.Entity<InstanceConfig>()
+            .Property(x => x.Features)
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+                v => JsonSerializer.Deserialize<Dictionary<string, bool>>(v, (JsonSerializerOptions?)null) ?? new());
+    }
+
+    /// <summary>A fresh, isolated database per test.</summary>
+    public static TestDbContext Create() =>
+        new(new DbContextOptionsBuilder<TestDbContext>()
+            .UseInMemoryDatabase($"aimsby-tests-{Guid.NewGuid():N}")
+            .Options);
+}

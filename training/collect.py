@@ -1,11 +1,11 @@
-"""Runs the training prompts through a real PersonaOS instance and records each turn.
+"""Runs the training prompts through a real Aimsby instance and records each turn.
 
 For every prompt: a fresh conversation, the chat call, every model call the proxy logged for it,
 and what the turn ended in (the proposals as stored, with their inputs, and the reads that ran).
 Each proposal is discarded and the conversation deleted afterwards. The instance's AI base URL is
 pointed at the proxy for the run and put back at the end.
 
-    PERSONAOS_USER=… PERSONAOS_PASSWORD=… python -I training/collect.py \
+    AIMSBY_USER=… AIMSBY_PASSWORD=… python -I training/collect.py \
         --proxy-log data/training/calls.jsonl --out data/training/traces.jsonl
 
 Point it at a development instance: the prompts create (and then discard) proposals of their own.
@@ -141,7 +141,8 @@ def main() -> None:
     parser.add_argument("--server", default="http://localhost:5080")
     parser.add_argument("--proxy", default="http://localhost:11500/v1")
     parser.add_argument("--proxy-log", required=True)
-    parser.add_argument("--db", default="src/backend/PersonaOS.Api/data/personaos.db")
+    # Legacy id, kept on purpose: the database file keeps its name from before the rename to Aimsby.
+    parser.add_argument("--db", default="src/backend/Aimsby.Api/data/personaos.db")
     parser.add_argument("--out", required=True)
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=10_000)
@@ -149,8 +150,11 @@ def main() -> None:
     parser.add_argument("--only", nargs="*", help="capabilities to run (default: all)")
     args = parser.parse_args()
 
+    # Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
+    user = os.environ.get("AIMSBY_USER") or os.environ["PERSONAOS_USER"]
+    password = os.environ.get("AIMSBY_PASSWORD") or os.environ["PERSONAOS_PASSWORD"]
     token = call(args.server, "POST", "/api/auth/login", body={
-        "username": os.environ["PERSONAOS_USER"], "password": os.environ["PERSONAOS_PASSWORD"]})["accessToken"]
+        "username": user, "password": password})["accessToken"]
     original = call(args.server, "GET", "/api/setup", token)["aiBaseUrl"]
     if original == args.proxy:
         # A run that died left the proxy in place; restoring it would leave the instance pointing at

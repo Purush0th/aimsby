@@ -50,7 +50,11 @@ jobs:
           # The API reports this version, and the update check compares it with the releases.
           build-args: VERSION=${{ steps.version.outputs.value }}
           push: true
+          # Legacy id, kept on purpose: the personaos-* names are what installs from before the
+          # rename to Aimsby pull (the updater never replaces their docker-compose.yml).
           tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-api:${{ steps.version.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-api:latest
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-api:${{ steps.version.outputs.value }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-api:latest
           cache-from: type=gha
@@ -59,10 +63,14 @@ jobs:
       - name: Build and push web
         uses: docker/build-push-action@v7
         with:
-          context: src/frontend/PersonaOS.Web
+          context: src/frontend/Aimsby.Web
           platforms: linux/amd64,linux/arm64
           push: true
+          # Legacy id, kept on purpose: the personaos-* names are what installs from before the
+          # rename to Aimsby pull (the updater never replaces their docker-compose.yml).
           tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-web:${{ steps.version.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-web:latest
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-web:${{ steps.version.outputs.value }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-web:latest
           cache-from: type=gha
@@ -75,7 +83,11 @@ jobs:
           context: deploy/speech/whisper
           platforms: linux/amd64
           push: true
+          # Legacy id, kept on purpose: the personaos-* names are what installs from before the
+          # rename to Aimsby pull (the updater never replaces their docker-compose.yml).
           tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-whisper:${{ steps.version.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-whisper:latest
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-whisper:${{ steps.version.outputs.value }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-whisper:latest
           cache-from: type=gha,scope=whisper
@@ -88,7 +100,11 @@ jobs:
           context: deploy/updater
           platforms: linux/amd64,linux/arm64
           push: true
+          # Legacy id, kept on purpose: the personaos-* names are what installs from before the
+          # rename to Aimsby pull (the updater never replaces their docker-compose.yml).
           tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-updater:${{ steps.version.outputs.value }}
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/aimsby-updater:latest
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-updater:${{ steps.version.outputs.value }}
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.value }}/personaos-updater:latest
 
@@ -117,12 +133,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bash scripts/release-notes.sh "$GITHUB_REF_NAME" 'v*' \
-            ':(exclude)src/frontend/PersonaOS.Mobile' ':(exclude).github/workflows/release-mobile.yml' > dist/notes.md
+            ':(exclude)src/frontend/Aimsby.Mobile' ':(exclude).github/workflows/release-mobile.yml' > dist/notes.md
           cat >> dist/notes.md <<EOF
           ## Install
 
           \`\`\`bash
-          mkdir personaos && cd personaos
+          mkdir aimsby && cd aimsby
           curl -LO https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/docker-compose.yml
           curl -LO https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/env.example
           cp env.example .env   # set JWT_SIGNING_KEY
@@ -130,7 +146,7 @@ jobs:
           \`\`\`
 
           Then open <http://localhost:8080> for the Setup Wizard. Runs on x86-64
-          and ARM (Raspberry Pi, Apple Silicon). No database service — PersonaOS
+          and ARM (Raspberry Pi, Apple Silicon). No database service — Aimsby
           uses embedded SQLite; back up the \`api-data\` volume (see docs/BACKUP.md).
 
           ## Upgrade

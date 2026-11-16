@@ -1,4 +1,4 @@
-# Optional speech service for PersonaOS (speech-to-text): faster-whisper, plus a pass-through
+# Optional speech service for Aimsby (speech-to-text): faster-whisper, plus a pass-through
 # to Kokoro for text-to-speech. Built by the `speech` profile of deploy/docker-compose.yml.
 # The NVIDIA driver comes from the host (nvidia-container-toolkit, or Docker Desktop on
 # Windows); CUDA 12 and cuDNN 9 come from pip, so the image needs no CUDA base image.

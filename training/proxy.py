@@ -1,4 +1,4 @@
-"""Records what PersonaOS sends the model, for building training data.
+"""Records what Aimsby sends the model, for building training data.
 
 Sits between the API and Ollama: point the instance's AI base URL at this proxy and every
 /api/chat call is passed through unchanged and appended to a JSONL log, with the request body and

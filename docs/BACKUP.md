@@ -1,6 +1,6 @@
 # Backup & restore
 
-PersonaOS uses embedded **SQLite**, so persistence is just files — but that means
+Aimsby uses embedded **SQLite**, so persistence is just files — but that means
 *you* own the durability story. This is the runbook.
 
 ## What makes up "your data"
@@ -39,7 +39,7 @@ Tune it with env: `Backup__Enabled`, `Backup__Path`, `Backup__KeepDays`.
 > # docker-compose.yml → api service
 > volumes:
 >   - api-data:/app/data
->   - /srv/personaos-backups:/app/data/backups   # a separate disk / NAS mount
+>   - /srv/aimsby-backups:/app/data/backups   # a separate disk / NAS mount
 > ```
 
 ## Layer 2 — off-host continuous replication (Litestream, optional)

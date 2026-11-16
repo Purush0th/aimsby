@@ -1,4 +1,4 @@
-# PersonaOS — working rules
+# Aimsby — working rules
 Map: [docs/architecture.md](docs/architecture.md). Coding bar: [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
 ## Session protocol
@@ -12,7 +12,7 @@ Map: [docs/architecture.md](docs/architecture.md). Coding bar: [docs/ENGINEERING
 - Layers: Api → Application ← Infrastructure; Application → Domain. Controllers use Application
   interfaces only, never `AppDbContext`. New capability = port in Application + adapter in
   Infrastructure. Only `AnthropicMessageStreamer` touches the Anthropic SDK.
-- Brand "PersonaOS" is fixed everywhere; the only per-install settings are nickname and persona
+- Brand "Aimsby" is fixed everywhere; the only per-install settings are nickname and persona
   (`InstanceConfig`). Never hardcode user data.
 - AI goes through `IAiMessageStreamer` with native tool-use (not MCP); a provider is one adapter.
   Tools stay thin wrappers over domain services.
@@ -22,17 +22,17 @@ Map: [docs/architecture.md](docs/architecture.md). Coding bar: [docs/ENGINEERING
 - Tests target the Application layer; extend `TestSupport/Fakes.cs`, no mocking library.
 
 ## Commands
-- Build: `dotnet build PersonaOS.slnx`
-- Test: `dotnet test src/backend/PersonaOS.Tests`
-- Migration: `dotnet dotnet-ef migrations add <Name> --project src/backend/PersonaOS.Infrastructure --startup-project src/backend/PersonaOS.Infrastructure -o Persistence/Migrations`
-- API (from `src/backend/PersonaOS.Api`):
+- Build: `dotnet build Aimsby.slnx`
+- Test: `dotnet test src/backend/Aimsby.Tests`
+- Migration: `dotnet dotnet-ef migrations add <Name> --project src/backend/Aimsby.Infrastructure --startup-project src/backend/Aimsby.Infrastructure -o Persistence/Migrations`
+- API (from `src/backend/Aimsby.Api`):
   `ASPNETCORE_URLS="http://localhost:5080" ASPNETCORE_ENVIRONMENT=Development dotnet run --no-launch-profile`;
-  stop with `taskkill //F //IM PersonaOS.Api.exe` (killing the wrapper locks DLLs).
-- Web (`src/frontend/PersonaOS.Web`): `npx ng serve` (:4200, proxies `/api`);
+  stop with `taskkill //F //IM Aimsby.Api.exe` (killing the wrapper locks DLLs).
+- Web (`src/frontend/Aimsby.Web`): `npx ng serve` (:4200, proxies `/api`);
   tests `npx ng test --watch=false --browsers=ChromeHeadless`.
-- Phone (`src/frontend/PersonaOS.Mobile`): `flutter analyze && flutter test`; `dart format` at 120.
-- Accuracy: `scripts/model-check.ps1 -Runs 5` (needs `PERSONAOS_USER` / `PERSONAOS_PASSWORD`).
-- Reset dev DB: stop the API, `rm src/backend/PersonaOS.Api/data/personaos.db*`.
+- Phone (`src/frontend/Aimsby.Mobile`): `flutter analyze && flutter test`; `dart format` at 120.
+- Accuracy: `scripts/model-check.ps1 -Runs 5` (needs `AIMSBY_USER` / `AIMSBY_PASSWORD`).
+- Reset dev DB: stop the API, `rm src/backend/Aimsby.Api/data/personaos.db*`.
 
 <!-- agent-router:start (managed section; re-running /agent-router replaces it) -->
 ## Orchestration & model routing

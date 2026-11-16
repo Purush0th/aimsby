@@ -4,14 +4,14 @@ Map for finding things. The full design, with diagram and reasons, is
 [CLAUDE.md](../CLAUDE.md).
 
 ## Components
-- **API** (`src/backend/`, .NET 10): `PersonaOS.Api` (controllers, `Program.cs` composition
-  root, JWT validation, Data Protection) -> `PersonaOS.Application` (use cases, ports in
-  `Common/Interfaces`, chat tool loop, guards, prompt building) <- `PersonaOS.Infrastructure`
+- **API** (`src/backend/`, .NET 10): `Aimsby.Api` (controllers, `Program.cs` composition
+  root, JWT validation, Data Protection) -> `Aimsby.Application` (use cases, ports in
+  `Common/Interfaces`, chat tool loop, guards, prompt building) <- `Aimsby.Infrastructure`
   (EF Core + SQLite, AI provider adapters, secrets, JWT, push, file storage, speech);
-  `PersonaOS.Domain` (entities, pure rules). Tests: `PersonaOS.Tests` (xUnit, Application layer).
-- **Web** (`src/frontend/PersonaOS.Web`, Angular 22): everything except voice and alarms, plus
+  `Aimsby.Domain` (entities, pure rules). Tests: `Aimsby.Tests` (xUnit, Application layer).
+- **Web** (`src/frontend/Aimsby.Web`, Angular 22): everything except voice and alarms, plus
   the Setup Wizard and admin Settings.
-- **Phone** (`src/frontend/PersonaOS.Mobile`, Flutter, Android): chat, voice and hands-free,
+- **Phone** (`src/frontend/Aimsby.Mobile`, Flutter, Android): chat, voice and hands-free,
   goals, board, planner, reminders with alarms, notes, memories.
 - **AI providers**: Anthropic, OpenAI-compatible and Ollama adapters behind `IAiMessageStreamer`;
   per-model `ModelProfiles` (context size, thinking, tool rounds, prompt variant).
@@ -71,7 +71,7 @@ CI in `.github/workflows/ci.yml`. Prod updates through the app's updater.
 - EF tools are pinned locally (`dotnet dotnet-ef`), not installed globally.
 
 ## Local dev
-- Dev DB: embedded SQLite at `src/backend/PersonaOS.Api/data/personaos.db` (WAL, gitignored),
+- Dev DB: embedded SQLite at `src/backend/Aimsby.Api/data/personaos.db` (WAL, gitignored),
   created and migrated on first run; path is `Database:Path`. No LocalDB or SQL Server.
 - Free local chat: the **Ollama** provider at `http://localhost:11434` (keyless; the dev DB uses
   `qwen2.5:3b-instruct`), via the Setup Wizard or `POST /api/setup`. Host Ollama runs flash
@@ -80,7 +80,7 @@ CI in `.github/workflows/ci.yml`. Prod updates through the app's updater.
 - Web: Angular 22 (core, CLI, Material, CDK on 22.1); unit tests on Karma.
 - Phone: Flutter with strict casts, inference and raw types.
 - Voice: `COMPOSE_PROFILES=speech` in `deploy/.env` runs faster-whisper (`deploy/speech/whisper`)
-  and Kokoro on the GPU; PersonaOS uses `http://whisper:8000/v1`, models `large-v3-turbo` /
+  and Kokoro on the GPU; Aimsby uses `http://whisper:8000/v1`, models `large-v3-turbo` /
   `kokoro`. Python pins (PyAV below 15) are in that folder's `requirements.txt`. No host ports;
   see README "Voice".
 - The server's `MinSupportedClient` is the oldest phone app it works with.

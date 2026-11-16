@@ -1,9 +1,9 @@
-"""Writes PersonaOS's notification chime: two soft bell notes rising a fifth, 0.7 s, mono.
+"""Writes Aimsby's notification chime: two soft bell notes rising a fifth, 0.7 s, mono.
 
 Made from scratch here, so the sound is the project's own under its licence, with nothing to
 credit. Run it again to change the sound:
 
-    python scripts/make-chime.py src/frontend/PersonaOS.Mobile/android/app/src/main/res/raw/personaos_chime.wav
+    python scripts/make-chime.py src/frontend/Aimsby.Mobile/android/app/src/main/res/raw/aimsby_chime.wav
 
 Standard library only.
 """

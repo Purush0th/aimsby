@@ -1,4 +1,4 @@
-# PersonaOS engineering standard
+# Aimsby engineering standard
 
 This is the bar every change is held to, by a person or an AI session. It is short on purpose:
 each rule is here because breaking it has cost something, and most rules are checked by the
@@ -123,10 +123,10 @@ listed there) and `flutter analyze` with no issues.
 
 | What | Where | How |
 |---|---|---|
-| Rules and use cases | `PersonaOS.Tests` | Application layer, `TestDbContext` (EF InMemory) and the fakes in `TestSupport`; no mocking library |
-| Provider adapters | `PersonaOS.Tests/Ai` | Stub `HttpMessageHandler`: what is sent, how replies are read |
-| Architecture | `PersonaOS.Tests/Architecture` | Dependency rule |
-| Phone UI | `PersonaOS.Mobile/test` | Widget tests with fake APIs, at phone and tablet sizes |
+| Rules and use cases | `Aimsby.Tests` | Application layer, `TestDbContext` (EF InMemory) and the fakes in `TestSupport`; no mocking library |
+| Provider adapters | `Aimsby.Tests/Ai` | Stub `HttpMessageHandler`: what is sent, how replies are read |
+| Architecture | `Aimsby.Tests/Architecture` | Dependency rule |
+| Phone UI | `Aimsby.Mobile/test` | Widget tests with fake APIs, at phone and tablet sizes |
 | Web UI | `*.spec.ts` | Karma |
 | Model behaviour | `scripts/model-check.ps1` | Real model, several runs, pass rate |
 

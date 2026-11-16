@@ -3,7 +3,7 @@
 Status: agreed with the owner on 2026-09-15 and built; revised to match the product on
 2026-09-26. Progress lives in `TODO.md`; the product overview is [PRD.md](PRD.md).
 
-PersonaOS brings a light version of Scrum to one person's life: work is broken down under
+Aimsby brings a light version of Scrum to one person's life: work is broken down under
 goals, estimated in value points, pulled into a one-week sprint on Sunday evening, and moved
 across a board during the week. At the end of each sprint the user sees what they committed to
 and what they finished. No team features.
@@ -14,7 +14,7 @@ comments and attachments, and "story points" are called **value points**.
 
 ## 1. Concepts
 
-| PersonaOS | Jira equivalent | Key | Lives on the board? |
+| Aimsby | Jira equivalent | Key | Lives on the board? |
 |---|---|---|---|
 | Goal | Epic | `GOAL-n` | No. Shown as a chip on its tasks. |
 | Task | Story / task | `TASK-n` | Yes |

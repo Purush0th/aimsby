@@ -91,8 +91,38 @@ class UpdaterTest(unittest.TestCase):
     def calls_made(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
 
-    def version_in_env(self):
-        return [line for line in (self.project / ".env").read_text().splitlines() if line.startswith("PERSONAOS_VERSION=")]
+    def version_in_env(self, key="PERSONAOS_VERSION"):
+        return [line for line in (self.project / ".env").read_text().splitlines() if line.startswith(f"{key}=")]
+
+    def test_a_new_install_has_its_aimsby_version_rewritten(self):
+        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nAIMSBY_VERSION=0.1.0-alpha.9\n")
+        self.request("0.1.0-alpha.10")
+        self.served.write_text("0.1.0-alpha.10")
+
+        status = self.run_once()
+
+        self.assertEqual("done", status["state"])
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env("AIMSBY_VERSION"))
+        self.assertEqual([], self.version_in_env())
+
+    def test_a_rollback_puts_the_aimsby_version_back(self):
+        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nAIMSBY_VERSION=0.1.0-alpha.9\n")
+        self.request("0.1.0-alpha.10")
+
+        status = self.run_once()
+
+        self.assertEqual("rolled-back", status["state"])
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.9"], self.version_in_env("AIMSBY_VERSION"))
+
+    def test_an_env_without_a_version_gets_aimsby_version(self):
+        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\n")
+        self.request("0.1.0-alpha.10")
+        self.served.write_text("0.1.0-alpha.10")
+
+        status = self.run_once()
+
+        self.assertEqual("done", status["state"])
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env("AIMSBY_VERSION"))
 
     def test_installs_the_requested_release(self):
         self.request("0.1.0-alpha.10")
@@ -166,7 +196,7 @@ class UpdaterTest(unittest.TestCase):
         status = self.run_once()
 
         self.assertEqual("not-set-up", status["state"])
-        self.assertIn("PERSONAOS_DIR", status["message"])
+        self.assertIn("AIMSBY_DIR", status["message"])
         self.assertEqual([], self.calls_made())
 
     def test_with_nothing_asked_it_only_reports_that_it_is_alive(self):

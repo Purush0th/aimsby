@@ -1,0 +1,158 @@
+using Aimsby.Application.Ai;
+
+namespace Aimsby.Tests.Ai;
+
+/// <summary>
+/// The detector decides whether a reply gets a corrective model round or a "nothing was saved"
+/// warning, so both mistakes matter: a missed claim leaves the user misled, and a false alarm
+/// costs a slow extra round or a wrong warning on an honest reply.
+/// </summary>
+public class ActionClaimDetectorTests
+{
+    [Theory]
+    // The real reply that started this: qwen2.5, 2026-09-11, no tool called.
+    [InlineData("I've set a reminder to remind you to submit the report at 19:00 today.")]
+    [InlineData("I have created a new goal called Learn Rust for this month.")]
+    [InlineData("Done! I added \"Buy milk\" to your planner for tomorrow.")]
+    [InlineData("I went ahead and scheduled a reminder for 7pm.")]
+    [InlineData("I just marked the task as done.")]
+    [InlineData("I'll create a sub-goal for that under Master AI.")]
+    [InlineData("Your reminder has been set for 9:00 p.m.")]
+    [InlineData("The goal is now created and active.")]
+    [InlineData("I've updated your progress on Learn Rust to 40%.")]
+    [InlineData("I cancelled the reminder for the dentist.")]
+    [InlineData("Sure. I've moved the planner item to Friday.")]
+    // Training collection, 2026-11-05: after create_goal returned an error, and with no tool at all.
+    [InlineData("GOAL-10 was created. It's a yearly goal to read 24 books.")]
+    [InlineData("I have created a new yoga class for the day after tomorrow at 9:30 PM.")]
+    public void Catches_a_claimed_change(string reply)
+    {
+        Assert.NotNull(ActionClaimDetector.FindClaim(reply));
+    }
+
+    [Theory]
+    // Offers and questions.
+    [InlineData("I can set a reminder for 7pm if you like.")]
+    [InlineData("Shall I create that goal for you?")]
+    [InlineData("Would you like me to add it to your planner?")]
+    [InlineData("Do you want me to schedule a reminder?")]
+    // Proposals under the confirmation gate — these are honest.
+    [InlineData("I propose creating a goal called Learn Rust. Please confirm.")]
+    [InlineData("I've prepared a reminder for 7pm — it will be saved once you confirm.")]
+    // Honest refusals and negatives.
+    [InlineData("I haven't created the reminder yet.")]
+    [InlineData("I didn't add anything to your planner.")]
+    [InlineData("I can't set reminders because the reminders module is turned off.")]
+    // Reading existing data back, not changing it.
+    [InlineData("You have 3 goals: Learn Rust, Read Books Daily and Master AI.")]
+    [InlineData("Your next reminder is at 7pm: submit the report.")]
+    [InlineData("Here's a quick review of your current goals.")]
+    // First person, but nothing the assistant can change.
+    [InlineData("I've updated my understanding of what you need.")]
+    [InlineData("I set out the options below.")]
+    // Reported from the phone (alpha.6): an intention, ending in a request to go ahead. The
+    // amber "nothing was saved" note on this was a false alarm.
+    [InlineData("Sure, I'll add a new goal to create a tutorial. Here's the goal: Create Tutorial, "
+        + "monthly, starting today. Would you like to proceed with these details?")]
+    [InlineData("I'll set a reminder for 7pm. Shall I go ahead?")]
+    // Reading the board back, 2026-09-21: the amber note on this was a false alarm.
+    [InlineData("As of the last check, there were no tasks marked as todo. All tasks are either "
+        + "in progress or have been scheduled for future planned sprints.")]
+    [InlineData("There are no reminders due today.")]
+    // Read back with when it happened: history, not a claim.
+    [InlineData("TASK-5 was created on Monday and is still in to do.")]
+    [InlineData("Your dentist reminder was added two days ago.")]
+    // A time, but nothing the assistant did.
+    [InlineData("You're free tomorrow after 3pm.")]
+    [InlineData("You have 4 tasks, and both of them have been moved to SPRINT-3.")]
+    // A board read back (training run 2026-11-06b, bench-3): the tasks, not a change.
+    [InlineData("Tasks in the To Do column are those that have been added to the sprint this week and are ready for work.")]
+    // bench-9: the same, said another way.
+    [InlineData("You can see the status of each task, including which column they are in, and when they were added to the sprint.")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Leaves_honest_replies_alone(string? reply)
+    {
+        Assert.Null(ActionClaimDetector.FindClaim(reply));
+    }
+
+    [Fact]
+    public void Returns_the_claiming_sentence_not_the_whole_reply()
+    {
+        var claim = ActionClaimDetector.FindClaim(
+            "Great question. I've set a reminder for 7pm. Anything else?");
+
+        Assert.Equal("I've set a reminder for 7pm.", claim);
+    }
+
+    [Fact]
+    public void A_question_elsewhere_in_the_reply_does_not_hide_a_claim()
+    {
+        Assert.NotNull(ActionClaimDetector.FindClaim(
+            "Would you like a summary later? I've added the task to your planner."));
+    }
+
+    [Fact]
+    public void An_intention_with_nothing_asked_is_still_a_claim()
+    {
+        // The reason "I'll" is in the detector at all: models promise and never call the tool.
+        Assert.NotNull(ActionClaimDetector.FindClaim("I'll create a sub-goal for that under Master AI."));
+    }
+
+    [Fact]
+    public void Asking_to_proceed_does_not_excuse_saying_it_is_already_done()
+    {
+        Assert.NotNull(ActionClaimDetector.FindClaim(
+            "I've set the reminder for 7pm. Would you like to proceed with anything else?"));
+    }
+
+    [Fact]
+    public void Catches_a_done_claim_above_a_card_even_when_a_later_sentence_admits_it()
+    {
+        // Seen live on 2026-09-23, qwen2.5:3b-instruct through the Ollama provider, above a card.
+        const string reply = "I've created a new goal titled \"Learn Rust\" for this month. It hasn't been saved yet, "
+            + "but you'll see a card with this information. Once you confirm the creation of this goal, I can start "
+            + "working on it. How can I assist you further with the goal management?";
+
+        Assert.Equal("I've created a new goal titled \"Learn Rust\" for this month.", ActionClaimDetector.FindDoneClaim(reply));
+    }
+
+    [Theory]
+    // The owner's chat dawdsabu, replayed (2026-10-11): no card was made under either.
+    [InlineData("I have proposed a reminder for you to buy milk at 9 AM tomorrow. It is waiting for your confirmation.")]
+    [InlineData("Here is the change I would make — confirm it below if it looks right.")]
+    [InlineData("The reminder is pending your confirmation.")]
+    public void A_proposal_with_no_card_is_found(string reply)
+    {
+        Assert.NotNull(ActionClaimDetector.FindProposalClaim(reply));
+    }
+
+    [Theory]
+    [InlineData("Would you like me to propose a reminder for 9 AM?")]
+    [InlineData("You have no reminders at the moment.")]
+    [InlineData("Shall I set it for tomorrow?")]
+    public void A_question_or_a_report_is_not_a_proposal(string reply)
+    {
+        Assert.Null(ActionClaimDetector.FindProposalClaim(reply));
+    }
+
+    [Theory]
+    [InlineData("I have scheduled a reminder for you to buy milk at 09:00 tomorrow.", "create_reminder")]
+    [InlineData("I have noted that you need to remind yourself to buy milk.", "create_reminder")]
+    [InlineData("I've added Standup to your calendar.", "add_planner_item")]
+    [InlineData("I've created a new goal called Learn Rust.", "create_goal")]
+    [InlineData("I've added the task to your backlog.", "create_task")]
+    [InlineData("I've updated your settings.", null)]
+    public void The_tool_a_claim_needs_is_named_by_what_it_changed(string claim, string? tool)
+    {
+        string[] offered = ["create_reminder", "add_planner_item", "create_goal", "create_task", "create_note"];
+
+        Assert.Equal(tool, ChatService.ChangeToolFor(claim, offered));
+    }
+
+    [Fact]
+    public void A_tool_that_is_not_offered_is_never_named()
+    {
+        Assert.Null(ChatService.ChangeToolFor("I have scheduled a reminder.", ["create_goal"]));
+    }
+}

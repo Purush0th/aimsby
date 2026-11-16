@@ -5,7 +5,7 @@
 #
 #   scripts/release-notes.sh <tag> <tag pattern> [path ...]
 #   scripts/release-notes.sh v0.1.0-alpha.28 'v*'
-#   scripts/release-notes.sh mobile-v0.1.0-alpha.29 'mobile-v*' src/frontend/PersonaOS.Mobile
+#   scripts/release-notes.sh mobile-v0.1.0-alpha.29 'mobile-v*' src/frontend/Aimsby.Mobile
 #
 # Paths limit the list to commits that touched them (the phone app's notes skip server-only work).
 # Needs the full history and tags (actions/checkout with fetch-depth: 0).
@@ -44,6 +44,6 @@ else
 fi
 
 if [ -n "$previous" ]; then
-  echo "All changes: https://github.com/${GITHUB_REPOSITORY:-Purush0th/personaOS}/compare/$previous...$tag"
+  echo "All changes: https://github.com/${GITHUB_REPOSITORY:-Purush0th/aimsby}/compare/$previous...$tag"
   echo
 fi

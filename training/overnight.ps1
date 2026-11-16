@@ -12,7 +12,7 @@
   Run it from a terminal that outlives any agent session (the PC's own terminal), with the dev
   instance's admin login in the environment:
 
-    $env:PERSONAOS_USER = '…'; $env:PERSONAOS_PASSWORD = '…'
+    $env:AIMSBY_USER = '…'; $env:AIMSBY_PASSWORD = '…'
     ./training/overnight.ps1 -Run 2026-11-05 -Collect claims -Traces data/training/traces3.jsonl
 
   Needs: Docker Desktop running, Ollama with the stock model, Python 3.12+, the .NET SDK (the API is
@@ -34,7 +34,7 @@ param(
     # qwen2.5:3b's turns, lost to the stock 4B it started from).
     [string]$CollectModel = '',
     [string]$Stock = 'qwen2.5:3b-instruct',
-    [string]$Name = 'personaos-qwen2.5:3b',
+    [string]$Name = 'aimsby-qwen2.5:3b',
     # The base model's chat template in Ollama (ollama_template.FAMILIES); also picks the Modelfile.
     [ValidateSet('qwen2.5', 'qwen3')]
     [string]$Family = 'qwen2.5',
@@ -86,7 +86,10 @@ function Clear-Gpu {
 
 # ---- Preflight ----------------------------------------------------------------------------------
 Step "Run $Run in $dir"
-if (-not $env:PERSONAOS_USER -or -not $env:PERSONAOS_PASSWORD) { throw 'Set PERSONAOS_USER and PERSONAOS_PASSWORD (the dev instance admin).' }
+# Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
+if (-not $env:AIMSBY_USER) { $env:AIMSBY_USER = $env:PERSONAOS_USER }
+if (-not $env:AIMSBY_PASSWORD) { $env:AIMSBY_PASSWORD = $env:PERSONAOS_PASSWORD }
+if (-not $env:AIMSBY_USER -or -not $env:AIMSBY_PASSWORD) { throw 'Set AIMSBY_USER and AIMSBY_PASSWORD (the dev instance admin).' }
 docker info --format '{{.ServerVersion}}' | Out-Null; Native 'docker info (is Docker Desktop running?)'
 # Ollama does not always come back after a reboot (2026-11-05: every collected turn failed).
 try { $tags = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 10 } catch { throw 'Ollama is not answering on :11434; start the Ollama app first.' }
@@ -101,7 +104,7 @@ if (-not (Test-Api)) {
     Step 'Start the API'
     $env:ASPNETCORE_URLS = $Server; $env:ASPNETCORE_ENVIRONMENT = 'Development'
     Start-Process -WindowStyle Hidden dotnet -ArgumentList @('run', '--no-launch-profile') `
-        -WorkingDirectory (Join-Path $root 'src/backend/PersonaOS.Api') -RedirectStandardOutput (Join-Path $dir 'api.log') -RedirectStandardError (Join-Path $dir 'api.err.log') | Out-Null
+        -WorkingDirectory (Join-Path $root 'src/backend/Aimsby.Api') -RedirectStandardOutput (Join-Path $dir 'api.log') -RedirectStandardError (Join-Path $dir 'api.err.log') | Out-Null
     for ($i = 0; $i -lt 120 -and -not (Test-Api); $i++) { Start-Sleep -Seconds 2 }
     if (-not (Test-Api)) { throw "The API did not start; see api.log." }
 }
@@ -112,7 +115,7 @@ if ($Collect.Count -gt 0) {
     Step "Collect: $($Collect -join ', ')"
     $proxy = Start-Process -PassThru -WindowStyle Hidden python -ArgumentList @('-I', 'training/proxy.py', '--listen', '11500', '--log', (Join-Path $dir 'calls.jsonl'))
     $token = (Invoke-RestMethod -Method Post -Uri "$Server/api/auth/login" -ContentType 'application/json' `
-        -Body (@{ username = $env:PERSONAOS_USER; password = $env:PERSONAOS_PASSWORD } | ConvertTo-Json)).accessToken
+        -Body (@{ username = $env:AIMSBY_USER; password = $env:AIMSBY_PASSWORD } | ConvertTo-Json)).accessToken
     $auth = @{ Authorization = "Bearer $token" }
     $instanceModel = (Invoke-RestMethod -Uri "$Server/api/setup" -Headers $auth).aiModel
     try {
@@ -147,10 +150,11 @@ if (Test-Path (Join-Path $dir 'model/config.json')) { Step 'Train: already done'
     Native 'check_template (ollama_template.py no longer matches Ollama)'
     Step 'Train'
     Clear-Gpu
-    $container = "personaos-train-$Run"
+    $container = "aimsby-train-$Run"
     Into (Join-Path $dir 'docker-rm.log') "docker rm -f $container"
     $code = (Join-Path $root 'training') -replace '\\', '/'
     $data = $work -replace '\\', '/'
+    # Legacy id, kept on purpose: the model cache volume keeps its name from before the rename to Aimsby.
     docker run -d --name $container --gpus all -v "${code}:/code" -v "${data}:/work" -v personaos-hf-cache:/root/.cache/huggingface -w /code $Image `
         python train.py --data "$inContainer/dataset" --out "$inContainer/model" --checkpoints "$inContainer/checkpoints" --base $Base --family $Family --epochs $Epochs --lr $Lr | Out-Null
     Native 'docker run (train)'

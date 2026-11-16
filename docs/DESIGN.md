@@ -1,16 +1,16 @@
-# PersonaOS design guidelines: "Dusk"
+# Aimsby design guidelines: "Dusk"
 
 Proposed 2026-10-30 to replace "Sky". Drawn from the owner's reference board
-(`C:\Users\Purush\Desktop\PersonaOs`): the Aura voice assistant shots (dark violet, glowing orb,
+(`C:\Users\Purush\Desktop\Aimsby`): the Aura voice assistant shots (dark violet, glowing orb,
 big light headlines, numbers as heroes) and the Synchro / AutomatePro task tools (crisp neutral
 work surfaces, hairline structure, tinted status pills, ink-black main buttons).
 
-This file is **the bar for how PersonaOS looks**. `docs/ENGINEERING.md` is the bar for code; this one
+This file is **the bar for how Aimsby looks**. `docs/ENGINEERING.md` is the bar for code; this one
 is the bar for pixels. Both web (Angular Material 3) and phone (Flutter Material 3) follow it.
 
 ## 1. The idea
 
-PersonaOS is two things at once: **someone you talk to** and **a place where your work lives**.
+Aimsby is two things at once: **someone you talk to** and **a place where your work lives**.
 "Sky" treated both the same, so neither stood out. Dusk gives each its own register:
 
 | Layer | Where | Feel | Borrowed from |
@@ -106,7 +106,7 @@ plum, 2026-11-04).
   Android icon, the web rail. A square ink ground with the same discs: iOS, the Apple touch icon,
   the maskable web icon and the Android adaptive icon (whose 72 dp visible area is the 512 tile).
 - **Where it comes from.** `scripts/make-icons.mjs` holds the mark verbatim and only frames it: it
-  writes `PersonaOS.Web/public/mark.svg`, the favicons and install icons, the Android adaptive, legacy,
+  writes `Aimsby.Web/public/mark.svg`, the favicons and install icons, the Android adaptive, legacy,
   themed and notification icons, and the iOS app icons. Never edit a generated icon by hand. The web
   rail shows `mark.svg` as an image, the same on both themes.
 - **Don't** rotate it (the 45° offset is the composition), recolour it, put it on a mid-tone, or use
@@ -239,7 +239,7 @@ weight only for the active bottom-bar item. Material Icons go away.
 
 ## 12. Rollout order
 
-1. Tokens and font (web `styles.scss`, Flutter `_personaOsScheme`), no layout change.
+1. Tokens and font (web `styles.scss`, Flutter `_aimsbyScheme`), no layout change.
 2. Shell and nav rail; primary button style.
 3. Chat and the Orb (web and phone together).
 4. Phone home with stat cards; bottom bar with the raised Orb.

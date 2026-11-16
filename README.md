@@ -1,4 +1,4 @@
-# PersonaOS
+# Aimsby
 
 **A private, self-hosted personal AI assistant.** It runs on your own machine and manages your
 goals, sprint board, daily planner, reminders and memories through a chat and voice interface — powered by
@@ -32,13 +32,13 @@ CRUD app. Ask it to "move everything I didn't finish to tomorrow" and it will.
 
 ## AI providers
 
-Pick your backend in the Setup Wizard (and change it anytime in Settings). PersonaOS talks to
+Pick your backend in the Setup Wizard (and change it anytime in Settings). Aimsby talks to
 every provider through one neutral streaming port, so switching is a config change, not a
 rebuild:
 
 - **Anthropic (Claude)** — bring your own [API key](https://console.anthropic.com/); you pay
   Anthropic directly for usage.
-- **Ollama** — local models, **free and keyless**, through Ollama's own API. PersonaOS tells
+- **Ollama** — local models, **free and keyless**, through Ollama's own API. Aimsby tells
   it how much context to load and to skip a thinking model's reasoning on every request, which
   its OpenAI-compatible endpoint cannot do.
 - **OpenAI-compatible** — one setting (a base URL) covers **OpenAI, Groq, OpenRouter, LM
@@ -55,8 +55,8 @@ A **"Test connection"** button verifies the provider, model, and key before you 
 ## Install
 
 ```bash
-git clone https://github.com/Purush0th/personaOS.git
-cd personaos/deploy
+git clone https://github.com/Purush0th/aimsby.git
+cd aimsby/deploy
 cp .env.example .env
 ```
 
@@ -72,27 +72,27 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 Open <http://localhost:8080> and the **Setup Wizard** will ask for your assistant's name, an
 admin login, your AI provider (key, or base URL for a local model), and which modules you want.
-That's it — no database to set up; PersonaOS uses embedded SQLite.
+That's it — no database to set up; Aimsby uses embedded SQLite.
 
 ### Free, fully local setup (Ollama)
 
-Run PersonaOS with no API key and no cloud calls at all. Install [Ollama](https://ollama.com/)
+Run Aimsby with no API key and no cloud calls at all. Install [Ollama](https://ollama.com/)
 (or start the compose profile `ollama`), then in the Setup Wizard pick **Ollama** and press
-**Find Ollama**. PersonaOS looks for it (the compose service, this machine, the Docker host),
+**Find Ollama**. Aimsby looks for it (the compose service, this machine, the Docker host),
 shows the recommended model with its size and licence, and on **Download** pulls it into your
 Ollama with a progress bar. **Use this model** fills in the address and model; leave the key
 blank. The same panel is in Settings → AI provider.
 
 The recommended model is
-[personaos-qwen3-4b-instruct-GGUF](https://huggingface.co/purush0th/personaos-qwen3-4b-instruct-GGUF):
-Qwen3-4B-Instruct-2507 fine-tuned on PersonaOS's tools (Apache-2.0, 2.5 GB; needs a GPU with
+[aimsby-qwen3-4b-instruct-GGUF](https://huggingface.co/purush0th/aimsby-qwen3-4b-instruct-GGUF):
+Qwen3-4B-Instruct-2507 fine-tuned on Aimsby's tools (Apache-2.0, 2.5 GB; needs a GPU with
 8 GB or more, see [Hardware](#hardware-for-the-recommended-model)).
-PersonaOS downloads it and names it `personaos-qwen3:4b` in Ollama. To fetch it by hand instead
+Aimsby downloads it and names it `aimsby-qwen3:4b` in Ollama. To fetch it by hand instead
 (the second command gives it the short name without copying the files):
 
 ```bash
-ollama pull hf.co/purush0th/personaos-qwen3-4b-instruct-GGUF:Q4_K_M
-ollama cp hf.co/purush0th/personaos-qwen3-4b-instruct-GGUF:Q4_K_M personaos-qwen3:4b
+ollama pull hf.co/purush0th/aimsby-qwen3-4b-instruct-GGUF:Q4_K_M
+ollama cp hf.co/purush0th/aimsby-qwen3-4b-instruct-GGUF:Q4_K_M aimsby-qwen3:4b
 ```
 
 #### Hardware for the recommended model
@@ -100,7 +100,7 @@ ollama cp hf.co/purush0th/personaos-qwen3-4b-instruct-GGUF:Q4_K_M personaos-qwen
 **A GPU with 8 GB or more of graphics memory, and 16 GB of system memory.** Measured on an
 RTX 3060 12 GB with Ollama 0.40.15 and the [voice services](#voice-optional) loaded on the same card:
 
-| `personaos-qwen3:4b` at context | Graphics memory for the model | Replies |
+| `aimsby-qwen3:4b` at context | Graphics memory for the model | Replies |
 |---|---|---|
 | 16,384 (the default) | 4.0 GB | 92 tokens/s; a tool turn takes about 5 s |
 | 32,768 | 5.3 GB | 92 tokens/s; a tool turn takes about 5 s |
@@ -108,13 +108,13 @@ RTX 3060 12 GB with Ollama 0.40.15 and the [voice services](#voice-optional) loa
 Voice (Whisper and Kokoro) takes another 2.2 GB, and a desktop on the same card about 0.5 GB.
 So the 4B with voice at the default context peaks at 6.1 GB, more than a 6 GB card has, and at
 32k with voice it needs 7.4 GB plus the desktop: use a 12 GB card for that. Without voice, a 6 GB
-card runs the 4B at 16k. Do not go below 16,384: PersonaOS's instructions and tools alone take
+card runs the 4B at 16k. Do not go below 16,384: Aimsby's instructions and tools alone take
 about 9,000 tokens, so at 8,192 the model gets a cut-off prompt or Ollama refuses the request.
 
 Any other tool-capable model works too; give its name in the Model field. For Ollama on your
-host with PersonaOS in Docker, the base URL is `http://host.docker.internal:11434`.
+host with Aimsby in Docker, the base URL is `http://host.docker.internal:11434`.
 
-PersonaOS adjusts to the model it is given. Small models (1.5B parameters and under) get a
+Aimsby adjusts to the model it is given. Small models (1.5B parameters and under) get a
 shorter prompt and fewer tool rounds; thinking models such as Qwen 3 are told not to think
 before every reply; history is trimmed to what fits the model's context, with older messages
 kept as a short summary; and a model that goes silent ends the turn with an explanation instead
@@ -122,7 +122,7 @@ of leaving a spinner running.
 
 #### Choosing a local model
 
-The model must support **tool calling** — PersonaOS reads and writes your data through tools, so
+The model must support **tool calling** — Aimsby reads and writes your data through tools, so
 a model without them fails every request. Ollama says which: `ollama show <model>` lists
 `tools` under capabilities. Gemma 3 and Qwen 2 do not have it; Qwen 2.5, Qwen 3 and Llama 3.1
 do.
@@ -149,7 +149,7 @@ rest of this section is for Ollama reached through the **OpenAI-compatible** pro
 cannot pass a context size.
 
 Ollama sizes a model's context from its own default, which is often **4,096 tokens** — smaller
-than a PersonaOS request, which carries the system prompt, the tool definitions and your live
+than an Aimsby request, which carries the system prompt, the tool definitions and your live
 goals and board, and runs 8,000 tokens and up. The prompt is then silently truncated and the
 model looks stupid rather than starved: it asks you for today's date, calls the same tool
 repeatedly, or answers from nothing.
@@ -164,7 +164,7 @@ ollama create qwen2.5-3b-16k -f Modelfile
 Then use `qwen2.5-3b-16k` as the model in Settings. For every model at once, set
 `OLLAMA_CONTEXT_LENGTH=16384` in Ollama's environment instead. Watch `ollama ps` afterwards: if
 the size no longer fits your GPU it will show part on CPU, and generation slows to a crawl —
-use a smaller model in that case rather than a smaller context: below `16384` PersonaOS's
+use a smaller model in that case rather than a smaller context: below `16384` Aimsby's
 instructions and tools no longer fit.
 
 ## Editing the assistant's instructions
@@ -176,7 +176,7 @@ and the briefs). Small models get the
 `.compact` versions where one exists (`tool-rules.compact`, `product.compact`,
 `board.compact`), and you can add your own `<name>.compact.prompty` too. The defaults ship
 inside the server, in
-[`src/backend/PersonaOS.Application/Ai/Prompts/Fragments`](src/backend/PersonaOS.Application/Ai/Prompts/Fragments).
+[`src/backend/Aimsby.Application/Ai/Prompts/Fragments`](src/backend/Aimsby.Application/Ai/Prompts/Fragments).
 Each file has a short header saying what it is for and which values it can use, then the text.
 The files follow the [Prompty](https://github.com/microsoft/prompty) format (Mustache template,
 typed inputs with an example each), so the Prompty extension for VS Code opens and previews them.
@@ -190,7 +190,7 @@ edit it:
 
 ```bash
 mkdir -p prompts
-curl -fsSL https://raw.githubusercontent.com/Purush0th/personaOS/dev/src/backend/PersonaOS.Application/Ai/Prompts/Fragments/tool-rules.prompty -o prompts/tool-rules.prompty
+curl -fsSL https://raw.githubusercontent.com/Purush0th/aimsby/dev/src/backend/Aimsby.Application/Ai/Prompts/Fragments/tool-rules.prompty -o prompts/tool-rules.prompty
 # edit prompts/tool-rules.prompty, then:
 docker compose cp prompts/. api:/app/data/prompts
 ```
@@ -202,12 +202,12 @@ uses the default instead, so chat keeps working. Delete the file to go back to t
 
 ## Reaching it from your phone
 
-By default PersonaOS binds to **loopback only** — it is not exposed to your network. The
+By default Aimsby binds to **loopback only** — it is not exposed to your network. The
 recommended way to reach it from other devices is [Tailscale](https://tailscale.com/): install
 it on the host and your phone, then point the mobile app at
 `http://<your-machine>.<your-tailnet>.ts.net:8080`.
 
-If you'd rather expose it on your LAN, set `PERSONAOS_BIND=0.0.0.0` in `.env` — but put a
+If you'd rather expose it on your LAN, set `AIMSBY_BIND=0.0.0.0` in `.env` — but put a
 reverse proxy with TLS in front of it first. There is no HTTPS inside the compose bundle.
 
 ## Voice (optional)
@@ -217,7 +217,7 @@ speech engine, which needs nothing from you. You can replace it in one of three 
 
 **Your own speech service on an NVIDIA GPU.** Compose can run [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
 (speech-to-text) and [Kokoro](https://github.com/remsky/Kokoro-FastAPI) (text-to-speech) next to
-PersonaOS. Neither publishes a port; PersonaOS reaches them over the compose network.
+Aimsby. Neither publishes a port; Aimsby reaches them over the compose network.
 
 1. Needs the [NVIDIA container toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
    on Linux (Docker Desktop on Windows has GPU support built in) and about 2 GB of video memory
@@ -251,8 +251,8 @@ and puts the previous version back if it does not. To turn it on, in `.env`:
 
 ```bash
 COMPOSE_PROFILES=updater          # add it to any profiles you already use, e.g. speech,updater
-PERSONAOS_DIR=/opt/personaos      # the folder with docker-compose.yml and .env, as an absolute path
-PERSONAOS_VERSION=1.2.0           # the release you run; the updater changes this line
+AIMSBY_DIR=/opt/aimsby      # the folder with docker-compose.yml and .env, as an absolute path
+AIMSBY_VERSION=1.2.0           # the release you run; the updater changes this line
 ```
 
 then `docker compose up -d`. The updater is the only service with access to Docker (it mounts the
@@ -262,17 +262,17 @@ checks against the published releases first. A server on a pre-release follows p
 **By hand.**
 
 ```bash
-cd personaos/deploy
+cd aimsby/deploy
 docker compose pull && docker compose up -d
 ```
 
 Database migrations run automatically on start; your data and settings are preserved. To pin a
-version for reproducible upgrades, set `PERSONAOS_VERSION` in `.env` — and to roll back, set it
+version for reproducible upgrades, set `AIMSBY_VERSION` in `.env` — and to roll back, set it
 to the previous version and run the same command.
 
 **The phone app** tells you when a newer one is out, once the server is up to date, and **Update**
 downloads it from the release and opens Android's installer: one tap on Android's own "Update"
-screen (the first time, Android also asks to allow installing apps from PersonaOS). Your settings
+screen (the first time, Android also asks to allow installing apps from Aimsby). Your settings
 stay. This works only between APKs signed with the same key — see below. About (the ⓘ on the home
 screen) shows the app's and the server's versions and checks for updates. When the server needs a
 newer app than the one installed, the home screen says so.
@@ -287,7 +287,7 @@ git tag mobile-v0.2.0 && git push origin mobile-v0.2.0    # Android app: the sig
 ```
 
 A tag with a prerelease part (`-alpha.14`) publishes a GitHub prerelease. When an API change
-breaks older apps, raise `MinSupportedClient` in `src/backend/PersonaOS.Api/ApiVersionInfo.cs`.
+breaks older apps, raise `MinSupportedClient` in `src/backend/Aimsby.Api/ApiVersionInfo.cs`.
 
 ### Signing the phone app
 
@@ -297,42 +297,45 @@ without it. Make the key once, keep it safe (lose it and every phone has to rein
 and add it to GitHub:
 
 ```bash
-keytool -genkeypair -v -keystore personaos-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias personaos
-base64 -w0 personaos-release.jks > personaos-release.jks.b64      # PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("personaos-release.jks"))
-gh secret set ANDROID_KEYSTORE_BASE64 < personaos-release.jks.b64
+keytool -genkeypair -v -keystore aimsby-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias aimsby
+base64 -w0 aimsby-release.jks > aimsby-release.jks.b64      # PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes("aimsby-release.jks"))
+gh secret set ANDROID_KEYSTORE_BASE64 < aimsby-release.jks.b64
 gh secret set ANDROID_KEYSTORE_PASSWORD
-gh secret set ANDROID_KEY_ALIAS --body personaos
+gh secret set ANDROID_KEY_ALIAS --body aimsby
 gh secret set ANDROID_KEY_PASSWORD
 ```
 
 To build releases on your own machine with the same key, put it next to the app's Android project
-as `src/frontend/PersonaOS.Mobile/android/key.properties` (ignored by git):
+as `src/frontend/Aimsby.Mobile/android/key.properties` (ignored by git):
 
 ```properties
-storeFile=/absolute/path/to/personaos-release.jks
+storeFile=/absolute/path/to/aimsby-release.jks
 storePassword=...
-keyAlias=personaos
+keyAlias=aimsby
 keyPassword=...
 ```
+
+The alias is any name you like, as long as `ANDROID_KEY_ALIAS` and `keyAlias` match it. The key
+this project already signs with was made before the rename to Aimsby and keeps the alias `personaos`.
 
 An APK signed with another key (a debug build, or one from before this key) cannot be updated in
 place: uninstall it once and install a signed release.
 
 ## Moving to another server
 
-On the old server, stop PersonaOS and pack the data volume (database, attachments, and the keys that
+On the old server, stop Aimsby and pack the data volume (database, attachments, and the keys that
 decrypt your stored API keys, so keep the file private):
 
 ```bash
 docker compose stop
 docker run --rm -v personaos_api-data:/data:ro -v "$PWD:/out" alpine:3.20 \
-  tar czf /out/personaos-data.tar.gz -C /data --exclude=./backups .
+  tar czf /out/aimsby-data.tar.gz -C /data --exclude=./backups .
 ```
 
 Install on the new server as above, copy `.env` and the archive across, then from the compose folder:
 
 ```bash
-./import-data.sh personaos-data.tar.gz
+./import-data.sh aimsby-data.tar.gz
 ```
 
 Point the phone at the new address (Settings → Server) and delete the archive.
@@ -347,20 +350,20 @@ Everything lives in **one** Docker volume, `personaos_api-data`:
 - `dp-keys/` — the Data Protection keyring that **decrypts** the stored key
 
 Because the ciphertext (in the db) and its keyring live in the same volume, **back that volume
-up as a unit**. PersonaOS also writes a nightly self-contained snapshot, and an optional
+up as a unit**. Aimsby also writes a nightly self-contained snapshot, and an optional
 [Litestream](https://litestream.io/) overlay gives continuous off-host replication — see
 **[docs/BACKUP.md](docs/BACKUP.md)** for the full backup & restore runbook.
 
 ## Building and developing
 
 ```bash
-dotnet build PersonaOS.slnx          # backend (keep it at 0 warnings)
-dotnet test src/backend/PersonaOS.Tests
-npx ng serve                          # web app, in src/frontend/PersonaOS.Web
-flutter run                           # mobile, in src/frontend/PersonaOS.Mobile
+dotnet build Aimsby.slnx          # backend (keep it at 0 warnings)
+dotnet test src/backend/Aimsby.Tests
+npx ng serve                          # web app, in src/frontend/Aimsby.Web
+flutter run                           # mobile, in src/frontend/Aimsby.Mobile
 ```
 
-The dev backend uses embedded SQLite at `src/backend/PersonaOS.Api/data/personaos.db` (created
+The dev backend uses embedded SQLite at `src/backend/Aimsby.Api/data/personaos.db` (created
 on first run). See [CLAUDE.md](CLAUDE.md) for the architecture, layer rules, and working
 conventions, and [docs/PRD.md](docs/PRD.md) for what the product is and why.
 

@@ -1,0 +1,218 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging.Abstractions;
+using Aimsby.Application.Ai;
+using Aimsby.Application.Board;
+using Aimsby.Application.Board.Tools;
+using Aimsby.Application.Goals;
+using Aimsby.Application.Goals.Tools;
+using Aimsby.Application.Planner;
+using Aimsby.Application.Planner.Tools;
+using Aimsby.Domain.Entities;
+using Aimsby.Tests.TestSupport;
+
+namespace Aimsby.Tests.Board;
+
+/// <summary>
+/// The assistant addresses goals and tasks by key. A model on a phone passed a goal's position in a
+/// numbered list ("Goal 3 does not exist") — keys make that mistake either impossible or loud.
+/// </summary>
+public class BoardToolsTests
+{
+    private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
+
+    private static (TestDbContext Db, BoardService Board, GoalService Goals) Setup()
+    {
+        var db = TestDbContext.Create();
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 9, 15, 9, 0, 0, TimeSpan.Zero));
+        var board = new BoardService(db, new FakeInstanceConfigService(db), new FakePushSender(), clock, NullLogger<BoardService>.Instance);
+        return (db, board, TestGoals.Service(db, clock));
+    }
+
+    [Fact]
+    public async Task Goal_tools_find_the_goal_by_key_not_by_position()
+    {
+        var (_, _, goals) = Setup();
+        await goals.CreateAsync(TestGoals.Year("Get masters"));
+        await goals.CreateAsync(TestGoals.Month("Read books"));
+
+        var result = await new UpdateGoalStatusTool(goals).ExecuteAsync(Json("""{"goalKey":"GOAL-2","progress":20}"""));
+
+        Assert.Contains("Read books", result);
+        var goal = (await goals.GetAllAsync()).Single(g => g.Key == "GOAL-2");
+        Assert.Equal(20, goal.Progress);
+    }
+
+    [Fact]
+    public async Task A_key_that_does_not_exist_says_to_use_keys_not_positions()
+    {
+        var (_, _, goals) = Setup();
+
+        var ex = await Assert.ThrowsAsync<GoalValidationException>(() =>
+            new UpdateGoalStatusTool(goals).ExecuteAsync(Json("""{"goalKey":"GOAL-3","status":"completed"}""")));
+
+        Assert.Contains("not list positions", ex.Message);
+    }
+
+    [Fact]
+    public async Task Create_task_puts_it_under_the_goal_with_points()
+    {
+        var (_, board, goals) = Setup();
+        await goals.CreateAsync(TestGoals.Month("Learn Rust"));
+
+        var result = await new CreateTaskTool(board, goals).ExecuteAsync(
+            Json("""{"title":"Borrow checker","goalKey":"GOAL-1","points":5,"priority":"high"}"""));
+
+        var task = (await board.GetPlanAsync()).Backlog.Single();
+        Assert.Equal("TASK-1", task.Key);
+        Assert.Equal("GOAL-1", task.GoalKey);
+        Assert.Equal(5, task.Points);
+        Assert.Equal("high", task.Priority);
+        Assert.Contains("TASK-1", result);
+    }
+
+    [Fact]
+    public async Task The_sprint_report_says_its_counts_in_words()
+    {
+        // qwen2.5:3b read "taskCount": 1, "unestimatedCount": 0 as one unestimated task.
+        var (_, board, goals) = Setup();
+        var sprint = await board.CreateSprintAsync(new CreateSprintRequest("Week one"));
+        await board.CreateTaskAsync(new CreateTaskRequest("Strength", Points: 3, SprintKey: sprint.Key));
+        await board.StartSprintAsync(sprint.Id);
+
+        var report = await new GetSprintReportTool(board, goals).ExecuteAsync(Json("{}"));
+        var boardJson = await new GetBoardTool(board, goals).ExecuteAsync(Json("{}"));
+
+        Assert.Contains("\"unestimated\":\"none: every task has value points\"", report);
+        Assert.Contains("\"tasks\":\"1 task, 0 done\"", report);
+        Assert.DoesNotContain("unestimatedCount", report);
+        Assert.Contains("none: every task has value points", boardJson);
+    }
+
+    [Fact]
+    public async Task Get_task_reads_one_task_wherever_it_is_with_its_facts_in_words()
+    {
+        // Asked about a backlog task, the model read the board (the running sprint only) and said
+        // the task was not there.
+        var (_, board, goals) = Setup();
+        await board.CreateTaskAsync(new CreateTaskRequest("Water the plants", Points: 5));
+        await board.CreateTaskAsync(new CreateTaskRequest("Sort receipts"));
+
+        var watered = await new GetTaskTool(board, goals).ExecuteAsync(Json("""{"taskKey":"TASK-1"}"""));
+        var receipts = await new GetTaskTool(board, goals).ExecuteAsync(Json("""{"taskKey":"task-2"}"""));
+
+        Assert.Contains("\"valuePoints\":\"5\"", watered);
+        Assert.Contains("\"status\":\"Backlog\"", watered);
+        Assert.Contains("in the backlog (in no sprint)", watered);
+        Assert.Contains("none: it is unestimated", receipts);
+        await Assert.ThrowsAsync<BoardValidationException>(
+            () => new GetTaskTool(board, goals).ExecuteAsync(Json("""{"taskKey":"TASK-99"}""")));
+    }
+
+    [Fact]
+    public async Task Move_and_update_tools_take_task_keys()
+    {
+        var (_, board, goals) = Setup();
+        var sprint = await board.CreateSprintAsync(new CreateSprintRequest("Week one"));
+        var task = await board.CreateTaskAsync(new CreateTaskRequest("Write intro", SprintKey: sprint.Key));
+        await board.StartSprintAsync(sprint.Id);
+
+        await new UpdateTaskTool(board, goals).ExecuteAsync(Json("""{"taskKey":"TASK-1","points":3}"""));
+        await new MoveTaskTool(board, goals).ExecuteAsync(Json("""{"taskKey":"task-1","column":"in_progress"}"""));
+
+        var moved = (await board.GetTaskAsync(task.Id))!.Task;
+        Assert.Equal(3, moved.Points);
+        Assert.Equal(BoardColumns.InProgress, moved.Column);
+        Assert.Equal("SPRINT-1", moved.SprintKey);
+    }
+
+    [Fact]
+    public async Task A_planner_item_with_no_day_is_for_today_and_the_card_says_which_day()
+    {
+        // Asked for "today", the model sometimes passed tomorrow's date; leaving it out cannot.
+        var (db, board, goals) = Setup();
+        var config = new FakeInstanceConfigService(db);
+        var tool = new AddPlannerItemTool(new PlannerService(db), goals, board, config);
+        var today = Aimsby.Application.Common.UserClock.Today((await config.GetOrCreateAsync()).TimeZone);
+
+        var completed = await tool.CompleteInputAsync(Json("""{"title":"Buy milk"}"""));
+        var given = await tool.CompleteInputAsync(Json("""{"title":"Buy milk","date":"2026-12-24"}"""));
+
+        Assert.Contains($"\"date\":\"{today:yyyy-MM-dd}\"", completed);
+        Assert.Contains("2026-12-24", given);
+        Assert.Contains($"— {today:yyyy-MM-dd}", Aimsby.Application.Ai.ProposedActionSummary.Describe("add_planner_item", completed));
+    }
+
+    [Fact]
+    public async Task A_planner_item_with_nothing_to_do_is_refused_before_the_card()
+    {
+        var (db, board, goals) = Setup();
+        var tool = new AddPlannerItemTool(new PlannerService(db), goals, board, new FakeInstanceConfigService(db));
+
+        var ex = await Assert.ThrowsAsync<PlannerValidationException>(() => tool.ValidateAsync(Json("""{"date":"2026-10-01"}""")));
+
+        Assert.Contains("'title' is required", ex.Message);
+        await tool.ValidateAsync(Json("""{"title":"Buy milk"}"""));
+    }
+
+    [Fact]
+    public async Task A_day_plan_can_be_picked_from_a_board_task_and_shows_its_goal()
+    {
+        var (db, board, goals) = Setup();
+        await goals.CreateAsync(TestGoals.Month("Learn Rust"));
+        await board.CreateTaskAsync(new CreateTaskRequest("Borrow checker", GoalId: 1));
+        var planner = new PlannerService(db);
+
+        await new AddPlannerItemTool(planner, goals, board, new FakeInstanceConfigService(db)).ExecuteAsync(
+            Json("""{"taskKey":"TASK-1","date":"2026-09-15"}"""));
+
+        var item = (await planner.GetDayAsync(new DateOnly(2026, 9, 15))).Items.Single();
+        Assert.Equal("Borrow checker", item.Title);
+        Assert.Equal("TASK-1", item.TaskKey);
+        Assert.Equal("GOAL-1", item.GoalKey);
+        Assert.Equal("Learn Rust", item.GoalTitle);
+    }
+
+    [Fact]
+    public void Proposal_cards_name_the_task_and_warn_about_scope()
+    {
+        var summary = ProposedActionSummary.Describe(
+            "create_task", """{"title":"Pay bill","points":2,"priority":"high","sprintKey":"SPRINT-2"}""");
+
+        Assert.Contains("“Pay bill”", summary);
+        Assert.Contains("points 2", summary);
+        Assert.Contains("priority high", summary);
+        Assert.Contains("to SPRINT-2", summary);
+        Assert.Contains("no goal", summary);
+        Assert.Contains("scope change", summary);
+
+        // Nothing joins or leaves a sprint here, so no warning belongs on the card.
+        var move = ProposedActionSummary.Describe("move_task", """{"taskKey":"TASK-4","column":"done"}""");
+        Assert.Contains("TASK-4", move);
+        Assert.DoesNotContain("scope change", move);
+    }
+
+    [Theory]
+    [InlineData("""{"title":"Renew passport","points":7}""", "Value points must be one of")]
+    [InlineData("""{"title":"Renew passport","priority":"urgent"}""", "Priority must be one of")]
+    [InlineData("""{"title":"  "}""", "Title must not be empty")]
+    public async Task A_task_that_cannot_be_created_never_becomes_a_card(string input, string expected)
+    {
+        var (_, board, goals) = Setup();
+
+        var ex = await Assert.ThrowsAsync<BoardValidationException>(() => new CreateTaskTool(board, goals).ValidateAsync(Json(input)));
+
+        Assert.Contains(expected, ex.Message);
+    }
+
+    [Fact]
+    public async Task Points_off_the_scale_are_refused_before_an_update_card_too()
+    {
+        var (_, board, goals) = Setup();
+        await board.CreateTaskAsync(new CreateTaskRequest("Renew passport"));
+
+        var ex = await Assert.ThrowsAsync<BoardValidationException>(
+            () => new UpdateTaskTool(board, goals).ValidateAsync(Json("""{"taskKey":"TASK-1","points":4}""")));
+
+        Assert.Contains("Value points must be one of", ex.Message);
+    }
+}

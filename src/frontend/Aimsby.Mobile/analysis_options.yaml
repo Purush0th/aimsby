@@ -1,0 +1,42 @@
+# Static analysis for the Aimsby phone app: `flutter analyze` must report no issues.
+# The rules below go beyond flutter_lints where a mistake has cost, or would cost, something
+# real; see docs/ENGINEERING.md (Dart).
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+  language:
+    # No silent dynamic: a JSON field read with the wrong type fails where it is read.
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+formatter:
+  # The code is written to 120 columns; `dart format` keeps it there instead of reflowing to 80.
+  page_width: 120
+
+linter:
+  rules:
+    # A Future nobody awaits hides its failure; await it or mark it with unawaited().
+    - unawaited_futures
+    - discarded_futures
+    - avoid_void_async
+    # Every member says what it returns and takes.
+    - always_declare_return_types
+    - type_annotate_public_apis
+    # Calls on dynamic are unchecked.
+    - avoid_dynamic_calls
+    # Streams and timers are closed with the widget that opened them.
+    - cancel_subscriptions
+    - close_sinks
+    # Readable, consistent source.
+    - directives_ordering
+    - prefer_final_locals
+    - prefer_single_quotes
+    - unnecessary_await_in_return
+    - unnecessary_lambdas
+    - prefer_const_constructors
+    - prefer_const_declarations

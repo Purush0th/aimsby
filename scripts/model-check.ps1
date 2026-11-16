@@ -1,9 +1,9 @@
 ﻿<#
 .SYNOPSIS
-  Scores an AI model against the behaviour PersonaOS needs from it: the accuracy suite.
+  Scores an AI model against the behaviour Aimsby needs from it: the accuracy suite.
 
 .DESCRIPTION
-  Runs a fixed set of conversations against a running PersonaOS instance and checks what the
+  Runs a fixed set of conversations against a running Aimsby instance and checks what the
   tools actually did and what the reply says against the data, not what the reply claims. Each
   scenario is one fresh conversation, so a confused turn cannot poison the next one. Most
   scenarios come from a real incident; each says which.
@@ -17,7 +17,7 @@
   the scenarios seed data of their own.
 
 .EXAMPLE
-  $env:PERSONAOS_USER = 'admin'; $env:PERSONAOS_PASSWORD = '…'
+  $env:AIMSBY_USER = 'admin'; $env:AIMSBY_PASSWORD = '…'
   ./scripts/model-check.ps1 -Model qwen2.5:3b-instruct -Temperature 0.2 -Runs 5 -Json result.json
 #>
 [CmdletBinding()]
@@ -41,16 +41,17 @@ param(
     [string]$Json,
     [string]$Server = 'http://localhost:5080',
     # The admin login of the instance under test. Taken from the environment so no one's
-    # credentials live in the script: set PERSONAOS_USER and PERSONAOS_PASSWORD, or pass them.
-    [string]$User = $env:PERSONAOS_USER,
-    [string]$Password = $env:PERSONAOS_PASSWORD,
+    # credentials live in the script: set AIMSBY_USER and AIMSBY_PASSWORD, or pass them.
+    # Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
+    [string]$User = $(if ($env:AIMSBY_USER) { $env:AIMSBY_USER } else { $env:PERSONAOS_USER }),
+    [string]$Password = $(if ($env:AIMSBY_PASSWORD) { $env:AIMSBY_PASSWORD } else { $env:PERSONAOS_PASSWORD }),
     [int]$TimeoutSec = 180
 )
 
 $ErrorActionPreference = 'Stop'
 
 if (-not $User -or -not $Password) {
-    throw 'Give the admin login: -User and -Password, or set PERSONAOS_USER and PERSONAOS_PASSWORD.'
+    throw 'Give the admin login: -User and -Password, or set AIMSBY_USER and AIMSBY_PASSWORD.'
 }
 
 function Invoke-Api {
@@ -458,12 +459,12 @@ try {
             }
         },
         @{
-            # qwen2.5 told a user to install PersonaOS from the App Store, which does not list it.
+            # qwen2.5 told a user to install Aimsby from the App Store, which does not list it.
             Name  = 'real download link'
-            Say   = 'Where can I download PersonaOS?'
+            Say   = 'Where can I download Aimsby?'
             Check = {
                 param($d)
-                if ($d.text -notmatch 'github\.com/Purush0th/personaOS') { return 'gives no real project link' }
+                if ($d.text -notmatch 'github\.com/Purush0th/aimsby') { return 'gives no real project link' }
                 # "It is not in the app stores" is right; sending the user to one is not.
                 $stores = 'app stores?|play store|google play'
                 if ($d.text -match "($stores)" -and $d.text -notmatch "(not|n't|never)[^.]{0,90}($stores)") { return 'sends the user to a store' }

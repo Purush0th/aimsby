@@ -1,12 +1,12 @@
-# Contributing to PersonaOS
+# Contributing to Aimsby
 
-Thanks for taking a look. PersonaOS is a single-user, self-hosted assistant — that constraint
+Thanks for taking a look. Aimsby is a single-user, self-hosted assistant — that constraint
 shapes most decisions here, so please read the two ground rules before opening a PR.
 
 ## Ground rules
 
 **1. The brand is fixed; the assistant's name is not.**
-"PersonaOS" is the product name everywhere — namespaces, images, repo, docs. The *only*
+"Aimsby" is the product name everywhere — namespaces, images, repo, docs. The *only*
 per-install personalization is the assistant's **nickname** and its **persona/tone**, both
 stored in the singleton `InstanceConfig` row. No per-install theming, and never hardcode
 anything user-specific.
@@ -47,8 +47,8 @@ Full conventions, build commands, and gotchas live in [CLAUDE.md](CLAUDE.md).
 ## Before you open a PR
 
 ```bash
-dotnet build PersonaOS.slnx                 # warnings are errors (src/backend/Directory.Build.props)
-dotnet test src/backend/PersonaOS.Tests     # must be green
+dotnet build Aimsby.slnx                 # warnings are errors (src/backend/Directory.Build.props)
+dotnet test src/backend/Aimsby.Tests     # must be green
 ```
 
 For the phone app, `flutter analyze` must report no issues and `flutter test` must pass; for
@@ -59,7 +59,7 @@ to prompts, guards, tools or sampling also runs `scripts/model-check.ps1` before
   patched version rather than suppressing it.
 - **Add tests for logic that can silently misbehave** — schedulers, retries, permission gates,
   anything time- or timezone-dependent. Tests live at the Application layer and use the
-  scriptable fakes in `PersonaOS.Tests/TestSupport`; extend those rather than adding a mocking
+  scriptable fakes in `Aimsby.Tests/TestSupport`; extend those rather than adding a mocking
   library. If your code depends on the clock, take a `TimeProvider` so it can be tested.
 - **Gate new modules** with `[RequireFeature(InstanceConfig.Modules.X)]` and make the tool
   respect the same toggle.
@@ -73,8 +73,8 @@ Migrations are applied automatically on startup, so they must be safe on a live 
 
 ```bash
 dotnet dotnet-ef migrations add <Name> \
-  --project src/backend/PersonaOS.Infrastructure \
-  --startup-project src/backend/PersonaOS.Infrastructure \
+  --project src/backend/Aimsby.Infrastructure \
+  --startup-project src/backend/Aimsby.Infrastructure \
   -o Persistence/Migrations
 ```
 

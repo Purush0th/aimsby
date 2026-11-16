@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-16 - new product name chosen (Aimsby); rename plan written_
+_Last updated: 2026-11-16 - rename to Aimsby done in code on `rename/aimsby` (uncommitted)_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,9 +8,10 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Rename to Aimsby: owner does Phase 0 of [rename-aimsby.md](rename-aimsby.md) (Google Play and
-  India TM check, domain/handles, GitHub repo rename, wordmark, Android applicationId). Then start
-  Phase 3 compat code (env-var and JWT fallbacks, both GHCR names, updater) on `rename/aimsby`.
+- Rename to Aimsby: code done on branch `rename/aimsby` (worktree `D:\Projects\aimsby-rename`,
+  uncommitted, all tests green). Owner: India TM check, domain/handles, wordmark sign-off, a
+  Firebase Android app for `com.aimsby.app`, rename the GitHub repo, then commit, merge and release
+  (server first; the phone is a new package, so a reinstall). Then check an upgrade on prod.
 - A11. App bug first: the false-claim check does not cover a tool that returned an error
   ("GOAL-10 was created" after a refusal). See `Ai/ActionClaimDetector.cs` and `ClaimCheckGuard`
   in `Ai/Guards/ReplyGuards.cs`; add a failing test, fix, then `model-check.ps1 -Runs 5`. Then the training examples in TODO.md A11.
@@ -26,6 +27,8 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - iOS through the web app first.
 
 ## Done (recent)
+- 2026-11-16: rename to Aimsby done in code (Phases 1-3 of `docs/rename-aimsby.md`), on
+  `rename/aimsby`, not committed. Old names keep working (env, JWT, images, links, model, storage).
 - 2026-11-16: name search done; owner chose **Aimsby** (clear on USPTO, TMview, App Store,
   GitHub/npm/PyPI/Docker Hub, domains). Rename plan in `docs/rename-aimsby.md`; not started.
 - 2026-11-12: B4 fixed. The phone dropped the server's error `code`, so adding or moving a task
@@ -55,7 +58,7 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - On prod (6 GB card beside Whisper and Kokoro) the 4B left chat loading for minutes. A14: it
   needs 6.1 GB there, more than the card has; runaway replies added to it (capped by A15, not
   released yet). Prod stays on the 3B.
-- Rename to Aimsby waits on the owner's Phase 0 (Google Play and India TM unchecked from here).
+- Rename to Aimsby: India TM and the Play Store search are still the owner's to check.
 - Live Anthropic smoke test needs a real API key (kept for the public release).
 - Docker Desktop must be running for the speech profile on the dev PC.
 - `output/` is gitignored: the A14 benchmark script (`output/a14/bench.mjs`) and the A16

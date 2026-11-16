@@ -1,0 +1,111 @@
+using Microsoft.Extensions.Logging;
+using Aimsby.Application.Common.Interfaces;
+
+namespace Aimsby.Application.Ai.Guards;
+
+/// <summary>A finished reply on its way to being stored and shown, with what the guards found.</summary>
+public sealed class ReplyDraft(string text, ChatTurnState turn, bool isCorrection = false, bool interrupted = false)
+{
+    public string Text { get; private set; } = text;
+
+    public ChatTurnState Turn { get; } = turn;
+
+    /// <summary>This is the model's second attempt, after the claim check asked it to correct itself.</summary>
+    public bool IsCorrection { get; } = isCorrection;
+
+    /// <summary>The stream broke part way; the text is whatever arrived before it did.</summary>
+    public bool Interrupted { get; } = interrupted;
+
+    /// <summary>The text no longer matches what streamed to the user, who must be sent the stored version.</summary>
+    public bool Rewritten { get; private set; }
+
+    /// <summary>A sentence saying something was changed when it was not, found by <see cref="ClaimCheckGuard"/>.</summary>
+    public string? UnbackedClaim { get; set; }
+
+    /// <summary>
+    /// The claim is about a change that is proposed but not yet confirmed, rather than one nothing
+    /// asked for. The correction differs: describe the card, instead of making or taking back the change.
+    /// </summary>
+    public bool ClaimAwaitsConfirmation => UnbackedClaim is not null && Turn.Proposals.Count > 0;
+
+    /// <summary>Item keys the reply names that do not exist, found by <see cref="ItemReferenceGuard"/>.</summary>
+    public IReadOnlyList<string> UnknownItems { get; set; } = [];
+
+    /// <summary>
+    /// The true facts about tasks the reply got wrong ("TASK-1 has 3 value points and is In progress"),
+    /// found by <see cref="ItemFactGuard"/>; empty when it got them right or said nothing checkable.
+    /// </summary>
+    public IReadOnlyList<string> WrongFacts { get; set; } = [];
+
+    /// <summary>The sentences <see cref="WrongFacts"/> correct, so they can be taken out.</summary>
+    public IReadOnlyList<string> WrongSentences { get; set; } = [];
+
+    /// <summary>A sentence promising a lookup no tool made, found by <see cref="PromisedLookupGuard"/>.</summary>
+    public string? PromisedLookup { get; set; }
+
+    public void Rewrite(string text)
+    {
+        if (text == Text) return;
+        Text = text;
+        Rewritten = true;
+    }
+}
+
+/// <summary>Reviews a finished reply. Returns why it acted, or null when it had nothing to do.</summary>
+public interface IReplyGuard
+{
+    /// <summary>Short name, used in logs and metrics.</summary>
+    string Name { get; }
+
+    ValueTask<string?> ReviewAsync(ReplyDraft draft, CancellationToken ct);
+}
+
+/// <summary>
+/// Every reply passes these, in order, before it is stored:
+/// <list type="number">
+/// <item><see cref="ThinkingGuard"/> removes reasoning a thinking model wrote as content.</item>
+/// <item><see cref="LeakedToolCallGuard"/> removes tool calls printed as text.</item>
+/// <item><see cref="ToolNameGuard"/> removes sentences that name a tool.</item>
+/// <item><see cref="CorrectionPreambleGuard"/> removes "Sure, here is the corrected message:".</item>
+/// <item><see cref="CardInstructionGuard"/> removes "reply yes to confirm" above a card with buttons.</item>
+/// <item><see cref="UnaskedListGuard"/> removes a long list nobody asked for and sentences about "the user".</item>
+/// <item><see cref="ClaimCheckGuard"/> finds a claimed change that did not happen.</item>
+/// <item><see cref="PromisedLookupGuard"/> finds "let me check" with nothing checked.</item>
+/// <item><see cref="ItemReferenceGuard"/> finds item keys that do not exist.</item>
+/// <item><see cref="ItemFactGuard"/> finds what the reply says about a task's points or status that the data contradicts.</item>
+/// <item><see cref="UngroundedTimeGuard"/> takes out a time in an answer that nothing gave.</item>
+/// <item><see cref="OtherDayItemGuard"/> takes today's items out of an answer about another day.</item>
+/// <item><see cref="EmptyReplyGuard"/> says what happened when nothing is left to show.</item>
+/// </list>
+/// Cleaning comes before the checks so they read only what the user would, and the empty check
+/// comes last because any of the others can leave nothing behind.
+/// </summary>
+public sealed class ReplyPipeline(IAppDbContext db, ILogger<ReplyPipeline> logger)
+{
+    private readonly IReplyGuard[] _guards =
+    [
+        new ThinkingGuard(),
+        new LeakedToolCallGuard(),
+        new ToolNameGuard(),
+        new CorrectionPreambleGuard(),
+        new CardInstructionGuard(),
+        new UnaskedListGuard(),
+        new ClaimCheckGuard(),
+        new PromisedLookupGuard(),
+        new ItemReferenceGuard(db),
+        new ItemFactGuard(db),
+        new UngroundedTimeGuard(db),
+        new OtherDayItemGuard(db),
+        new EmptyReplyGuard(),
+    ];
+
+    public async Task<ReplyDraft> ReviewAsync(ReplyDraft draft, CancellationToken ct)
+    {
+        foreach (var guard in _guards)
+        {
+            if (await guard.ReviewAsync(draft, ct) is { } reason) GuardTelemetry.Record(logger, guard.Name, draft.Turn.Model, reason);
+        }
+
+        return draft;
+    }
+}

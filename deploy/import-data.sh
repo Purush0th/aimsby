@@ -1,8 +1,8 @@
 #!/bin/sh
-# Loads a PersonaOS data archive into this install's data volume: for moving to a new server, or
+# Loads an Aimsby data archive into this install's data volume: for moving to a new server, or
 # for restoring a backup the updater made (./backups/before-*.tar.gz).
 #
-#   ./import-data.sh personaos-data.tar.gz
+#   ./import-data.sh aimsby-data.tar.gz
 #
 # The archive holds the database, attachments and the Data Protection keys that decrypt the stored
 # keys; keep it private, and delete it once imported. Whatever the volume held before is replaced,
@@ -13,6 +13,7 @@ archive="${1:?usage: ./import-data.sh <archive.tar.gz>}"
 [ -f "$archive" ] || { echo "No such file: $archive" >&2; exit 1; }
 folder=$(cd "$(dirname "$archive")" && pwd)
 name=$(basename "$archive")
+# Legacy id, kept on purpose: the compose project keeps its name from before the rename to Aimsby.
 volume="${COMPOSE_PROJECT_NAME:-personaos}_api-data"
 
 echo "Stopping the API..."

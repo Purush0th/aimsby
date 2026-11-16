@@ -1,0 +1,86 @@
+using Aimsby.Application.Common.Interfaces;
+
+namespace Aimsby.Application.Ai.Guards;
+
+/// <summary>
+/// What one user message has produced so far, shared by the guards and the chat loop: which calls
+/// were already answered, what was proposed, and what actually ran.
+/// </summary>
+public sealed class ChatTurnState(
+    string model,
+    IReadOnlySet<string> mutatingTools,
+    IReadOnlyList<string> toolNames,
+    string mode = Aimsby.Domain.Entities.ChatModes.Chat,
+    string? userMessage = null,
+    DateOnly? userToday = null,
+    IReadOnlySet<string>? writeTools = null,
+    DateTime? userNow = null,
+    IReadOnlyList<string>? earlierUserMessages = null)
+{
+    /// <summary>After this many repeated calls the model is stuck, and more rounds only cost time.</summary>
+    private const int StuckAfterRepeats = 2;
+
+    private readonly Dictionary<string, string> _answered = new(StringComparer.Ordinal);
+
+    public string Model { get; } = model;
+
+    /// <summary>The conversation's mode this turn (<see cref="Aimsby.Domain.Entities.ChatModes"/>).</summary>
+    public string Mode { get; } = mode;
+
+    /// <summary>What the user wrote this turn, for guards that check a call against it.</summary>
+    public string? UserMessage { get; } = userMessage;
+
+    /// <summary>The user's local date this turn; null when not known.</summary>
+    public DateOnly? UserToday { get; } = userToday;
+
+    /// <summary>The user's local date and time this turn; null when not known.</summary>
+    public DateTime? UserNow { get; } = userNow;
+
+    /// <summary>The user's last few messages before this one, newest last: "tomorrow at 9" answers a question asked about them.</summary>
+    public IReadOnlyList<string> EarlierUserMessages { get; } = earlierUserMessages ?? [];
+
+    /// <summary>Tools that change the user's data, so a call becomes a card instead of running.</summary>
+    public IReadOnlySet<string> MutatingTools { get; } = mutatingTools;
+
+    /// <summary>
+    /// Every tool offered this turn that changes data, those saved straight away (a note, a memory
+    /// with auto-save on) as well as those behind a card.
+    /// </summary>
+    public IReadOnlySet<string> WriteTools { get; } = writeTools ?? mutatingTools;
+
+    /// <summary>Every tool offered this turn; the scrubber only removes calls naming one of these.</summary>
+    public IReadOnlyList<string> ToolNames { get; } = toolNames;
+
+    /// <summary>Changes the model asked for, each waiting on a card for the user's confirmation.</summary>
+    public List<ProposedAction> Proposals { get; } = [];
+
+    /// <summary>Changes the model asked for that were refused before a card, with the reason, in order.</summary>
+    public List<string> Refusals { get; } = [];
+
+    /// <summary>What the tools actually did, from their own results.</summary>
+    public List<ToolReceipt> Receipts { get; } = [];
+
+    /// <summary>How many times the model repeated a call it had already made this turn.</summary>
+    public int Repeats { get; private set; }
+
+    public bool IsStuck => Repeats >= StuckAfterRepeats;
+
+    public bool TryRecall(AiToolCall call, out string result) => _answered.TryGetValue(Signature(call), out result!);
+
+    public void Remember(AiToolCall call, string result) => _answered[Signature(call)] = result;
+
+    public void CountRepeat() => Repeats++;
+
+    /// <summary>What the tools that ran this turn returned, whole, for checks against the data read.</summary>
+    public List<string> Results { get; } = [];
+
+    /// <summary>A call that ran: remembered for the repeat check, and receipted for the user.</summary>
+    public void RecordExecution(AiToolCall call, AiToolResult result)
+    {
+        Remember(call, result.Content);
+        Results.Add(result.Content);
+        Receipts.Add(ToolReceiptBuilder.Build(call.Name, result.Content, result.IsError));
+    }
+
+    private static string Signature(AiToolCall call) => call.Name + '|' + call.InputJson.Trim();
+}

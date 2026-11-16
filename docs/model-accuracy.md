@@ -1,4 +1,4 @@
-# PersonaOS — Intent Routing & Reliable Tool Execution
+# Aimsby — Intent Routing & Reliable Tool Execution
 
 **Type:** Functional requirement / implementation checklist  
 **Priority:** High  

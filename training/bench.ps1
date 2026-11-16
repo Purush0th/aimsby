@@ -10,7 +10,7 @@ param(
     [Parameter(Mandatory)][string]$Run,
     [string]$Into = 'bench-2',
     [string]$Stock = 'qwen2.5:3b-instruct',
-    [string]$Name = 'personaos-qwen2.5:3b',
+    [string]$Name = 'aimsby-qwen2.5:3b',
     [string[]]$Suites = @('all', 'holdout', 'holdout2', 'holdout3'),
     [int]$Runs = 3,
     [string]$Server = 'http://localhost:5080'

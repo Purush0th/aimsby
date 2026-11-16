@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/backend/">
+    <Project Path="src/backend/Aimsby.Api/Aimsby.Api.csproj" />
+    <Project Path="src/backend/Aimsby.Application/Aimsby.Application.csproj" />
+    <Project Path="src/backend/Aimsby.Domain/Aimsby.Domain.csproj" />
+    <Project Path="src/backend/Aimsby.Infrastructure/Aimsby.Infrastructure.csproj" />
+    <Project Path="src/backend/Aimsby.Tests/Aimsby.Tests.csproj" />
+  </Folder>
+</Solution>

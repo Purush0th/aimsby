@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chime is named only by the notification channel, and the notification icon only by a
+     string in Dart: keep both through resource shrinking. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@raw/aimsby_chime,@drawable/ic_stat_aimsby" />

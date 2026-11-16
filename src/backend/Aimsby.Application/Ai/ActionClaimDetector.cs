@@ -1,0 +1,186 @@
+using System.Text.RegularExpressions;
+
+namespace Aimsby.Application.Ai;
+
+/// <summary>
+/// Spots a reply that tells the user a change was made.
+///
+/// Models claim work they did not do. On 2026-09-11, asked to "remind me to submit the report at
+/// 7pm today", qwen2.5 replied "I've set a reminder to remind you to submit the report at 19:00
+/// today" and never called <c>create_reminder</c> — the reminders table stayed empty. Prompt rules
+/// did not stop it, and a missing receipt is too weak a signal: a user reading a confident "I've
+/// set a reminder" will not notice that nothing appeared beneath it. So the claim is detected in
+/// code, and the chat loop acts on it.
+///
+/// Deliberately narrow, because a false positive costs a corrective model round (slow on a local
+/// model) or a wrong warning. A sentence counts only when it is first-person (or a completed
+/// passive: "your reminder has been set"), names a change verb, names something the assistant can
+/// actually change, and is not a question, an offer or a proposal. It is a heuristic, English only,
+/// and it only runs when no change was proposed that turn — the callers make that decision.
+/// </summary>
+public static partial class ActionClaimDetector
+{
+    /// <summary>Things the assistant's tools can change. A claim about anything else is ignored.</summary>
+    [GeneratedRegex(@"\b(reminders?|alarms?|goals?|sub-?goals?|tasks?|to-?dos?|planner|plans?|schedule|calendar|items?|notes?|documents?|progress|appointments?|events?|sprints?|SPRINT-\d+|TASK-\d+)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DomainObject();
+
+    /// <summary>
+    /// Done, or claimed as done: "I've set", "I have created", "I just added",
+    /// "I went ahead and scheduled", "I set", "I've now updated". Up to three words may sit
+    /// between the subject and the verb ("I have now gone ahead and").
+    /// </summary>
+    [GeneratedRegex(@"\bi(?:'ve|’ve| have| had)?(?:\s+\w+){0,3}?\s+(set|created?|add(?:ed)?|schedul(?:ed|e)|sav(?:ed|e)|updat(?:ed|e)|chang(?:ed|e)|mark(?:ed)?|delet(?:ed|e)|remov(?:ed|e)|cancel(?:l?ed)?|mov(?:ed|e)|reschedul(?:ed|e)|logg?(?:ed)?|record(?:ed)?|book(?:ed)?|put|start(?:ed)?|complet(?:ed|e)|finish(?:ed)?|clos(?:ed|e)|kick(?:ed)?\s+off)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex FirstPersonDone();
+
+    /// <summary>
+    /// Still to come: "I'll create", "I will add", "I'm adding". Kept because models say
+    /// "I'll create it" and then never call the tool — but see <see cref="AsksPermission"/>.
+    /// </summary>
+    [GeneratedRegex(@"\bi(?:'ll|’ll| will|'m|’m| am)(?:\s+\w+){0,3}?\s+(set|creat(?:e|ing)|add(?:ing)?|schedul(?:e|ing)|sav(?:e|ing)|updat(?:e|ing)|chang(?:e|ing)|mark(?:ing)?|delet(?:e|ing)|remov(?:e|ing)|cancel(?:l?ing)?|mov(?:e|ing)|reschedul(?:e|ing)|logg?(?:ing)?|record(?:ing)?|book(?:ing)?|put|start(?:ing)?|complet(?:e|ing)|finish(?:ing)?|clos(?:e|ing)|kick(?:ing)?\s+off)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex FirstPersonIntent();
+
+    /// <summary>
+    /// The reply asks the user whether to go ahead: "Would you like to proceed with these
+    /// details?", "Shall I go ahead?", "Let me know if that looks right."
+    /// </summary>
+    [GeneratedRegex(@"\b(shall|should|can|may)\s+i\b|\b(would|do)\s+you\s+(like|want)\b|\bwant\s+me\s+to\b|\bproceed\b|\bgo\s+ahead\b|\blet\s+me\s+know\b|\bconfirm\b|\bsound\s+(good|right)\b|\blook\s+(good|right)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex AsksPermission();
+
+    /// <summary>"Your reminder has been set", "the goal is now created", "it's all set".</summary>
+    [GeneratedRegex(@"\b(?:has|have)\s+been\s+(set|created|added|scheduled|saved|updated|marked|deleted|removed|cancell?ed|moved|rescheduled|logged|recorded|booked)\b|\b(?:is|are)\s+(?:now\s+|all\s+)(set|created|added|scheduled|saved|updated|started|running|active|underway|live|in\s+progress|completed?|closed)\b|\bhas\s+(?:now\s+)?(?:been\s+)?(started|begun|kicked\s+off)\b|\bit'?s\s+all\s+set\b|" + WasMade, RegexOptions.IgnoreCase)]
+    private static partial Regex CompletedPassive();
+
+    /// <summary>
+    /// "GOAL-10 was created", "it was added successfully": a creation told in the past. qwen2.5:3b
+    /// wrote "GOAL-10 was created." right after create_goal returned an error (a yearly goal needs
+    /// 90 days, 2026-11-05), so nothing existed. Creation verbs only: "was moved" or "was set" read
+    /// back from a tool describe the user's data as often as they claim a change.
+    /// </summary>
+    private const string WasMade = @"\b(?:was|were)\s+(?:successfully\s+|just\s+|now\s+)?(?:created|added|scheduled|saved|booked)\b(?![^.!?]*\b(?:ago|earlier|yesterday|last\s+\w+|on\s+\w+day)\b)";
+
+    /// <summary>
+    /// A time or day: "at 9:30 PM", "tomorrow", "on Friday". A claim made about a time is about the
+    /// planner or a reminder even when it names neither: "I have created a new yoga class for the
+    /// day after tomorrow at 9:30 PM" (qwen2.5:3b, 2026-11-05, nothing saved).
+    /// </summary>
+    [GeneratedRegex(@"\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?|\b\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)|\b(?:today|tonight|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex TimeOrDay();
+
+    /// <summary>
+    /// Reporting what already exists rather than saying the assistant did something: "All tasks
+    /// are either in progress or have been scheduled for future sprints", "as of the last check",
+    /// "there are no reminders due". Read back from a tool, these are the honest answer to a
+    /// question — and the warning on them is a false alarm the user has to learn to ignore.
+    /// </summary>
+    [GeneratedRegex(@"\bas\s+of\b|\bcurrently\b|\balready\b|\bthere\s+(is|are|was|were)\b|\b(all|both|each|none)\s+(of\s+)?(the\s+|your\s+)?\w+\s+(is|are|were|have|has)\b|\bso\s+far\b|\bat\s+the\s+moment\b|\byou\s+have\b|\b(?:that|which)\s+(?:have|has|had)\s+been\b|\b(?:when|where|how|which|that)\s+(?:\w+\s+){0,2}(?:was|were)\s+(?:created|added|scheduled|saved|booked)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ReportsState();
+
+    /// <summary>
+    /// Wording that turns a sentence into an offer, a question or a proposal rather than a claim:
+    /// "I can set a reminder", "shall I create it?", "I propose adding", "once you confirm".
+    /// </summary>
+    [GeneratedRegex(@"\b(can|could|would|should|shall|may|might)\s+i\b|\bi\s+(can|could|would|might|may)\b|\b(would|do)\s+you\s+(like|want)\b|\bwant\s+me\s+to\b|\bif\s+you\b|\blet\s+me\s+know\b|\bpropos(e|ed|ing|al)\b|\bconfirm|\bonce\s+you\b|\bneed\s+your\b|\bnot\s+(yet|been)\b|\bhaven'?t\b|\bhave\s+not\b|\bdidn'?t\b|\bcan'?t\b|\bcannot\b|\bunable\b", RegexOptions.IgnoreCase)]
+    private static partial Regex NotAClaim();
+
+    /// <summary>
+    /// Wording about the card rather than the change: "I've prepared a card for it", "it's waiting
+    /// below". Honest above a card, so never read as a claim there.
+    /// </summary>
+    [GeneratedRegex(@"\bcards?\b|\bbelow\b|\bprepar(e|ed|ing)\b|\bdraft(ed|ing)?\b|\bwaiting\b|\bpending\b", RegexOptions.IgnoreCase)]
+    private static partial Regex DescribesTheCard();
+
+    [GeneratedRegex(@"(?<=[.!?])\s+|\n+")]
+    private static partial Regex SentenceBreak();
+
+    /// <summary>Says a change waits on the user's confirmation: "I have proposed a reminder", "it is waiting for your confirmation".</summary>
+    [GeneratedRegex(@"\bpropos(?:e|ed|ing|al)\b|\bwaiting\s+for\s+(?:your\s+)?confirm|\bpending\s+(?:your\s+)?confirm|\bconfirm\s+it\s+below\b|\bon\s+a\s+card\b", RegexOptions.IgnoreCase)]
+    private static partial Regex SaysProposed();
+
+    /// <summary>
+    /// The first sentence saying a change is proposed and waiting to be confirmed, or null. For a
+    /// turn that proposed nothing, where there is no card to confirm: qwen2.5:3b answered "I have
+    /// proposed a reminder for you to buy milk at 9 AM tomorrow. It is waiting for your
+    /// confirmation." and made no card (owner's chat dawdsabu, replayed, 2026-10-11).
+    /// </summary>
+    public static string? FindProposalClaim(string? reply) =>
+        Sentences(reply)
+            .Select(s => s.Trim())
+            .FirstOrDefault(s => s.Length > 0 && !s.EndsWith('?')
+                && ((DomainObject().IsMatch(s) && SaysProposed().IsMatch(s)) || PointsAtACard().IsMatch(s)));
+
+    /// <summary>
+    /// Sends the user to a card: "confirm it below", "the card below". The model copied the app's
+    /// own line above a card ("Here is the change I would make — confirm it below if it looks
+    /// right.") into a turn that made none.
+    /// </summary>
+    [GeneratedRegex(@"\b(?:confirm\w*|cards?)\b[^.!?]*\bbelow\b", RegexOptions.IgnoreCase)]
+    private static partial Regex PointsAtACard();
+
+    /// <summary>
+    /// "I'll remember that", "I've noted it", "I will keep that in mind", "Noted!": a promise to
+    /// remember. Not "I remember you said…", which is recalling a memory, not saving one.
+    /// </summary>
+    [GeneratedRegex(@"\bi(?:'ll|’ll|\s+will|'ve|’ve|\s+have)\s+(?:\w+\s+){0,2}?(?:remember(?:ed)?|not(?:e|ed)|sav(?:e|ed)\s+(?:that|this|it)|kept\s+(?:that|this|it)|keep\s+(?:that|this|it)\s+in\s+mind|make\s+a\s+note|made\s+a\s+note)\b|^\s*noted\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RemembersClaim();
+
+    /// <summary>
+    /// The first sentence promising to remember something, or null. Seen on qwen2.5:3b
+    /// (2026-09-29): "I'll remember that." with no memory saved, three times running.
+    /// </summary>
+    public static string? FindMemoryClaim(string reply) =>
+        SentenceBreak().Split(reply)
+            .Select(s => s.Trim())
+            .FirstOrDefault(s => s.Length > 0 && !s.EndsWith('?') && RemembersClaim().IsMatch(s) && !NotAClaim().IsMatch(s));
+
+    /// <summary>
+    /// Returns the first sentence of <paramref name="reply"/> that claims a change was made, or null.
+    /// For a turn that proposed nothing.
+    /// </summary>
+    public static string? FindClaim(string? reply)
+    {
+        var sentences = Sentences(reply);
+
+        // "Sure, I'll add a new goal … Would you like to proceed with these details?" is a
+        // proposal, not a report, and the amber warning on it was wrong. So a sentence that only
+        // says what the assistant is *about to* do counts as a claim when the reply asks for
+        // nothing. Anything claimed as already done still counts, question or no question.
+        var awaitsTheUser = sentences.Any(s => AsksPermission().IsMatch(s));
+
+        foreach (var sentence in Candidates(sentences))
+        {
+            if (ClaimsDone(sentence)) return sentence;
+            if (!awaitsTheUser && FirstPersonIntent().IsMatch(sentence)) return sentence;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the first sentence that says a change is already done, or null. For a turn that
+    /// proposed something: the card is still waiting, so "I've created a goal called Learn Rust"
+    /// above it is untrue, while "I'll create it once you confirm" and "I've prepared a card" are
+    /// not claims at all.
+    /// </summary>
+    public static string? FindDoneClaim(string? reply) =>
+        Candidates(Sentences(reply)).FirstOrDefault(s => !DescribesTheCard().IsMatch(s) && ClaimsDone(s));
+
+    private static string[] Sentences(string? reply) =>
+        string.IsNullOrWhiteSpace(reply) ? [] : SentenceBreak().Split(reply);
+
+    /// <summary>
+    /// Statements (not questions, offers or negations) about something the assistant can change,
+    /// or about a time, which only the planner and reminders hold.
+    /// </summary>
+    private static IEnumerable<string> Candidates(IEnumerable<string> sentences) => sentences
+        .Select(s => s.Trim())
+        .Where(s => s.Length > 0 && !s.EndsWith('?') && !NotAClaim().IsMatch(s)
+            && (DomainObject().IsMatch(s) || TimeOrDay().IsMatch(s)));
+
+    /// <summary>
+    /// A first-person "I've set", or a completed passive "has been set". The passive is the weakest
+    /// signal, so it loses to any sign the sentence describes the user's data rather than a change.
+    /// </summary>
+    private static bool ClaimsDone(string sentence) =>
+        FirstPersonDone().IsMatch(sentence)
+        || (CompletedPassive().IsMatch(sentence) && !ReportsState().IsMatch(sentence));
+}

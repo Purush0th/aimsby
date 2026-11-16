@@ -1,12 +1,12 @@
-# personaOS training framework
+# aimsby training framework
 
-personaOS already decides much of a turn in code: the guards and routers fix dates, titles and the
+aimsby already decides much of a turn in code: the guards and routers fix dates, titles and the
 choice of tool before anything reaches the user. This project turns those checked results into
 training data, so the small local model learns to get them right the first time, and measures
 whether it did. The app's code teaches the model; the accuracy suite (`scripts/model-check.ps1`)
 judges it; the owner decides whether it is adopted.
 
-It talks to personaOS only over its HTTP API (plus a read-only look at the dev database for
+It talks to aimsby only over its HTTP API (plus a read-only look at the dev database for
 fixtures), so it grows with the app's capabilities without being part of the app.
 
 Everything here is for a development machine with an NVIDIA GPU (tested on an RTX 3060, 12 GB).
@@ -44,7 +44,7 @@ From a terminal that outlives any agent session, with Docker Desktop and Ollama 
 power limit at 120 W (this machine's PSU cut out at full load):
 
 ```powershell
-$env:PERSONAOS_USER = '…'; $env:PERSONAOS_PASSWORD = '…'
+$env:AIMSBY_USER = '…'; $env:AIMSBY_PASSWORD = '…'
 ./training/overnight.ps1 -Run 2026-11-05 -Collect claims -Traces data/training/traces3.jsonl
 ```
 
@@ -53,9 +53,9 @@ again after any interruption):
 
 1. **Collect** new turns for the named capabilities, through the proxy.
 2. **Dataset** from the given earlier traces plus the new ones.
-3. **Train** in a detached container (`personaos-train-<Run>`), so it survives the terminal.
+3. **Train** in a detached container (`aimsby-train-<Run>`), so it survives the terminal.
 4. **Convert** to GGUF and quantize to q4_K_M (llama.cpp b11721), the stock model's quantization.
-5. **Import** into Ollama as `personaos-qwen2.5:3b`.
+5. **Import** into Ollama as `aimsby-qwen2.5:3b`.
 6. **Benchmark** stock and trained on every suite (`-Runs 3`).
 7. **Report** to `report.md`.
 
@@ -68,7 +68,7 @@ The same steps one at a time, from the repository root:
 
 ```bash
 python -I training/proxy.py --listen 11500 --log data/training/calls.jsonl
-PERSONAOS_USER=… PERSONAOS_PASSWORD=… python -I training/collect.py \
+AIMSBY_USER=… AIMSBY_PASSWORD=… python -I training/collect.py \
     --proxy-log data/training/calls.jsonl --out data/training/traces.jsonl --only claims
 python -I training/build_dataset.py data/training/dataset data/training/traces3.jsonl data/training/traces.jsonl
 docker run --rm --gpus all -v "$PWD/training:/code" -v "$PWD/data/training:/work" \

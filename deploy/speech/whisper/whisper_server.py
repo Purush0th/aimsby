@@ -1,7 +1,7 @@
-"""OpenAI-style speech server for PersonaOS: faster-whisper, with text-to-speech passed through.
+"""OpenAI-style speech server for Aimsby: faster-whisper, with text-to-speech passed through.
 
 Serves POST /v1/audio/transcriptions (multipart: file, model, language, response_format),
-GET /v1/models and GET /health. PersonaOS has one speech address for both directions, so
+GET /v1/models and GET /health. Aimsby has one speech address for both directions, so
 POST /v1/audio/speech and GET /v1/audio/voices are passed on to Kokoro (the `kokoro` service of
 the same compose file), and a self-hoster who runs only one of the two still gets a clear error
 for the other.
@@ -48,7 +48,7 @@ model_lock = threading.Lock()
 list(model.transcribe(numpy.zeros(16000, dtype=numpy.float32))[0])
 print("Model loaded and warmed up.", flush=True)
 
-app = FastAPI(title="PersonaOS speech")
+app = FastAPI(title="Aimsby speech")
 
 
 @app.get("/health")

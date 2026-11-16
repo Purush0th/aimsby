@@ -1,0 +1,1285 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+
+import '../date_utils.dart';
+import 'board_models.dart';
+
+export 'board_models.dart';
+
+/// One event from the chat SSE stream.
+class ChatEvent {
+  ChatEvent({
+    required this.type,
+    this.text,
+    this.conversationId,
+    this.error,
+    this.actions,
+    this.pending,
+    this.unverifiedClaim = false,
+    this.unknownItems = const [],
+  });
+
+  factory ChatEvent.fromJson(Map<String, dynamic> json) => ChatEvent(
+    type: json['type'] as String,
+    text: json['text'] as String?,
+    conversationId: json['conversationId'] as int?,
+    error: json['error'] as String?,
+    actions: (json['actions'] as List<dynamic>?)?.map((a) => ToolReceipt.fromJson(a as Map<String, dynamic>)).toList(),
+    pending: (json['pending'] as List<dynamic>?)
+        ?.map((a) => PendingAction.fromJson(a as Map<String, dynamic>))
+        .toList(),
+    unverifiedClaim: json['unverifiedClaim'] as bool? ?? false,
+    unknownItems: _stringList(json['unknownItems']),
+  );
+
+  final String type; // start | delta | tool | done | error
+  final String? text;
+  final int? conversationId;
+  final String? error;
+
+  /// On `done`: what the tools actually did this turn. Null when none ran.
+  final List<ToolReceipt>? actions;
+
+  /// On `done`: changes the assistant wants to make, awaiting confirmation. Null when none.
+  final List<PendingAction>? pending;
+
+  /// On `done`: the reply says a change was made, but no tool made one — nothing was saved.
+  final bool unverifiedClaim;
+
+  /// On `done`: item keys the reply names that do not exist, e.g. `['TASK-6']`.
+  final List<String> unknownItems;
+}
+
+List<String> _stringList(Object? json) => (json as List<dynamic>?)?.map((e) => e as String).toList() ?? const [];
+
+/// A data-changing action the assistant proposed.
+///
+/// Nothing has been written: the server refuses to run a mutating tool on the model's say-so,
+/// because models have created goals and reminders nobody asked for. It stays here until the
+/// user confirms or discards it, so the client must render it — otherwise the assistant simply
+/// cannot change anything on this device.
+class PendingAction {
+  PendingAction({
+    required this.id,
+    required this.tool,
+    required this.summary,
+    required this.status,
+    this.resultSummary,
+    this.resultOk,
+  });
+
+  factory PendingAction.fromJson(Map<String, dynamic> json) => PendingAction(
+    id: json['id'] as String,
+    tool: json['tool'] as String,
+    summary: json['summary'] as String? ?? '',
+    status: json['status'] as String? ?? 'pending',
+    resultSummary: json['resultSummary'] as String?,
+    resultOk: json['resultOk'] as bool?,
+  );
+
+  final String id;
+  final String tool;
+
+  /// What will happen, in the user's terms, e.g. `Create goal “Learn C#” — month · top-level`.
+  final String summary;
+
+  /// pending | confirmed | discarded.
+  final String status;
+
+  /// Once confirmed: what actually happened, from the tool's own result.
+  final String? resultSummary;
+  final bool? resultOk;
+
+  bool get isPending => status == 'pending';
+}
+
+/// What a tool actually did, recorded by the server from the tool's own result
+/// rather than from anything the model said. Shown under a reply so a claim like
+/// "I set your reminder for 6pm" can be checked against what was stored.
+class ToolReceipt {
+  ToolReceipt({required this.tool, required this.label, required this.ok, this.summary});
+
+  factory ToolReceipt.fromJson(Map<String, dynamic> json) => ToolReceipt(
+    tool: json['tool'] as String,
+    label: json['label'] as String? ?? json['tool'] as String,
+    ok: json['ok'] as bool? ?? true,
+    summary: json['summary'] as String?,
+  );
+
+  final String tool;
+
+  /// What ran, in the user's words ("Created goal"); the tool name is for the code only.
+  final String label;
+  final bool ok;
+  final String? summary;
+}
+
+/// A failed API call carrying a user-presentable message. The server returns
+/// `{ "error": "..." }` on validation failures; we surface that where present.
+class ApiException implements Exception {
+  ApiException(this.message, {this.code});
+  final String message;
+
+  /// The server's machine-readable error code, e.g. [scopeChangeCode].
+  final String? code;
+
+  @override
+  String toString() => message;
+}
+
+/// One planner event on one day. For an event that repeats this is one occurrence: [id] is the
+/// series and [occurrenceDate] says which (send it back to change or delete just this one).
+class PlannerItem {
+  PlannerItem({
+    required this.id,
+    required this.title,
+    required this.date,
+    required this.scheduledTime,
+    required this.status,
+    required this.goalTitle,
+    this.goalKey,
+    this.taskKey,
+    this.endTime,
+    this.notes,
+    this.goalId,
+    this.taskId,
+    this.notifyBeforeMinutes,
+    this.recurrence,
+    this.recurrenceText,
+    String? occurrenceDate,
+    this.isChanged = false,
+    this.endDate,
+  }) : occurrenceDate = occurrenceDate ?? date;
+
+  factory PlannerItem.fromJson(Map<String, dynamic> json) => PlannerItem(
+    id: json['id'] as int,
+    title: json['title'] as String,
+    date: json['date'] as String,
+    scheduledTime: json['scheduledTime'] as String?,
+    status: json['status'] as String,
+    goalTitle: json['goalTitle'] as String?,
+    goalKey: json['goalKey'] as String?,
+    taskKey: json['taskKey'] as String?,
+    endTime: json['endTime'] as String?,
+    notes: json['notes'] as String?,
+    goalId: json['goalId'] as int?,
+    taskId: json['taskId'] as int?,
+    notifyBeforeMinutes: json['notifyBeforeMinutes'] as int?,
+    recurrence: json['recurrence'] as String?,
+    recurrenceText: json['recurrenceText'] as String?,
+    occurrenceDate: json['occurrenceDate'] as String?,
+    isChanged: json['isChanged'] as bool? ?? false,
+    endDate: json['endDate'] as String?,
+  );
+
+  final int id;
+  final String title;
+  final String date;
+
+  /// Start, "HH:mm:ss"; null means the event lasts all day.
+  final String? scheduledTime;
+
+  /// End of a timed event (an hour after the start when none was set); null for all day.
+  final String? endTime;
+  final String status; // planned | done | skipped
+  final String? notes;
+  final int? goalId;
+  final String? goalTitle;
+
+  /// The goal's key, for the chip colour.
+  final String? goalKey;
+
+  /// The sprint-board task this item is a day's work on, if picked from the board.
+  final int? taskId;
+  final String? taskKey;
+
+  /// Minutes before the start the phone is notified; null means no notification.
+  final int? notifyBeforeMinutes;
+
+  /// The repeat rule (RFC 5545 RRULE text); null for a one-off.
+  final String? recurrence;
+
+  /// The repeat in words, like "Weekly on Saturday".
+  final String? recurrenceText;
+
+  /// The day the series put this occurrence on.
+  final String occurrenceDate;
+
+  /// This occurrence was changed on its own.
+  final bool isChanged;
+
+  /// The last day (yyyy-MM-dd): the same as [date] unless the event lasts several days. An older
+  /// server sends none.
+  final String? endDate;
+
+  bool get isAllDay => scheduledTime == null;
+  bool get repeats => recurrence != null;
+
+  /// The last day: [date] unless the event lasts several days.
+  String get lastDay => endDate != null && endDate!.compareTo(date) > 0 ? endDate! : date;
+
+  bool get isMultiDay => lastDay != date;
+
+  /// The same event moved or changed, for showing a change before the server has it.
+  PlannerItem copyWith({String? date, String? endDate, String? scheduledTime, String? endTime}) => PlannerItem(
+    id: id,
+    title: title,
+    date: date ?? this.date,
+    scheduledTime: scheduledTime ?? this.scheduledTime,
+    status: status,
+    goalTitle: goalTitle,
+    goalKey: goalKey,
+    taskKey: taskKey,
+    endTime: endTime ?? this.endTime,
+    notes: notes,
+    goalId: goalId,
+    taskId: taskId,
+    notifyBeforeMinutes: notifyBeforeMinutes,
+    recurrence: recurrence,
+    recurrenceText: recurrenceText,
+    occurrenceDate: occurrenceDate,
+    isChanged: isChanged,
+    endDate: endDate ?? this.endDate,
+  );
+}
+
+/// Which events of a repeating series a change or delete applies to.
+enum EditScope {
+  thisEvent('this'),
+  following('following'),
+  all('all');
+
+  const EditScope(this.wire);
+
+  /// The name the API takes.
+  final String wire;
+}
+
+/// A reminder with its due time resolved to the install's zone for display.
+class Reminder {
+  Reminder({
+    required this.id,
+    required this.message,
+    required this.dueAtLocal,
+    required this.dueAtUtc,
+    required this.status,
+    required this.goalTitle,
+    required this.plannerItemTitle,
+  });
+
+  factory Reminder.fromJson(Map<String, dynamic> json) => Reminder(
+    id: json['id'] as int,
+    message: json['message'] as String,
+    dueAtLocal: DateTime.parse(json['dueAtLocal'] as String),
+    dueAtUtc: parseServerUtc(json['dueAtUtc'] as String),
+    status: json['status'] as String,
+    goalTitle: json['goalTitle'] as String?,
+    plannerItemTitle: json['plannerItemTitle'] as String?,
+  );
+
+  final int id;
+  final String message;
+  final DateTime dueAtLocal;
+
+  /// The actual instant it is due — what an alarm is scheduled against. dueAtLocal is the
+  /// server's wall-clock rendering for display, and carries no zone.
+  final DateTime dueAtUtc;
+  final String status; // pending | delivered | cancelled | failed
+  final String? goalTitle;
+  final String? plannerItemTitle;
+}
+
+/// One conversation in the history list.
+class ConversationSummary {
+  ConversationSummary({required this.id, required this.publicId, required this.title, required this.updatedAtUtc});
+
+  factory ConversationSummary.fromJson(Map<String, dynamic> json) => ConversationSummary(
+    id: json['id'] as int,
+    publicId: json['publicId'] as String? ?? '',
+    title: json['title'] as String? ?? 'Untitled',
+    updatedAtUtc: parseServerUtc(json['updatedAtUtc'] as String),
+  );
+
+  final int id;
+  final String publicId;
+  final String title;
+  final DateTime updatedAtUtc;
+}
+
+/// One stored message, replayed when an old conversation is opened.
+class ChatMessageDto {
+  ChatMessageDto({
+    required this.role,
+    required this.content,
+    this.toolActions,
+    this.pendingActions,
+    this.unverifiedClaim = false,
+    this.unknownItems = const [],
+  });
+
+  factory ChatMessageDto.fromJson(Map<String, dynamic> json) => ChatMessageDto(
+    role: json['role'] as String,
+    content: json['content'] as String? ?? '',
+    toolActions: (json['toolActions'] as List<dynamic>?)
+        ?.map((a) => ToolReceipt.fromJson(a as Map<String, dynamic>))
+        .toList(),
+    pendingActions: (json['pendingActions'] as List<dynamic>?)
+        ?.map((a) => PendingAction.fromJson(a as Map<String, dynamic>))
+        .toList(),
+    unverifiedClaim: json['unverifiedClaim'] as bool? ?? false,
+    unknownItems: _stringList(json['unknownItems']),
+  );
+
+  final String role; // user | assistant
+  final String content;
+  final List<ToolReceipt>? toolActions;
+  final List<PendingAction>? pendingActions;
+
+  /// The reply says a change was made, but no tool made one — nothing was saved.
+  final bool unverifiedClaim;
+
+  /// Item keys the reply names that do not exist.
+  final List<String> unknownItems;
+}
+
+/// A conversation with its full message history.
+class ConversationDetail {
+  ConversationDetail({required this.id, required this.title, required this.messages, this.mode = 'chat'});
+
+  factory ConversationDetail.fromJson(Map<String, dynamic> json) => ConversationDetail(
+    id: json['id'] as int,
+    title: json['title'] as String? ?? 'Untitled',
+    messages: (json['messages'] as List<dynamic>? ?? [])
+        .map((m) => ChatMessageDto.fromJson(m as Map<String, dynamic>))
+        .toList(),
+    mode: ChatMode.parse(json['mode'] as String?),
+  );
+
+  final int id;
+  final String title;
+  final List<ChatMessageDto> messages;
+
+  /// The mode last used in this conversation.
+  final String mode;
+}
+
+/// How the assistant works in a conversation, picked with the switch in the chat box.
+class ChatMode {
+  const ChatMode(this.id, this.label, this.hint);
+
+  final String id;
+  final String label;
+  final String hint;
+
+  static const all = [
+    ChatMode('chat', 'Chat', 'Answer and discuss; changes come as cards.'),
+    ChatMode('brainstorm', 'Brainstorm', 'Explore options. Nothing is changed.'),
+    ChatMode('plan', 'Plan', 'Turn an intent into goals and tasks, proposed as cards.'),
+    ChatMode('act', 'Act', 'Get it done: changes come as cards straight away.'),
+    ChatMode('reflect', 'Reflect', 'Look back at progress and patterns. Nothing is changed.'),
+  ];
+
+  /// A known mode id, or 'chat' for anything else.
+  static String parse(String? id) => all.any((m) => m.id == id) ? id! : 'chat';
+
+  static ChatMode of(String id) => all.firstWhere((m) => m.id == id, orElse: () => all.first);
+}
+
+/// Something jotted down to deal with later.
+class NoteDto {
+  NoteDto({required this.id, required this.text, required this.updatedAtUtc});
+
+  factory NoteDto.fromJson(Map<String, dynamic> json) => NoteDto(
+    id: json['id'] as int,
+    text: json['text'] as String? ?? '',
+    updatedAtUtc: parseServerUtc(json['updatedAtUtc'] as String),
+  );
+
+  /// The longest note the server accepts: a thought, not a document.
+  static const maxLength = 2000;
+
+  final int id;
+  final String text;
+  final DateTime updatedAtUtc;
+}
+
+/// Something the assistant remembers across conversations.
+class MemoryDto {
+  MemoryDto({
+    required this.id,
+    required this.content,
+    required this.category,
+    required this.updatedAtUtc,
+    this.sourceConversationId,
+    this.sourceConversationTitle,
+  });
+
+  factory MemoryDto.fromJson(Map<String, dynamic> json) => MemoryDto(
+    id: json['id'] as int,
+    content: json['content'] as String? ?? '',
+    category: json['category'] as String? ?? 'fact',
+    updatedAtUtc: parseServerUtc(json['updatedAtUtc'] as String),
+    sourceConversationId: json['sourceConversationId'] as String?,
+    sourceConversationTitle: json['sourceConversationTitle'] as String?,
+  );
+
+  /// What kind of thing a memory is, in the order the screens list them.
+  static const categories = ['fact', 'preference', 'project', 'decision'];
+
+  /// The longest memory the server accepts: one short sentence.
+  static const maxLength = 500;
+
+  /// "preference" reads "Preference".
+  static String label(String category) =>
+      category.isEmpty ? category : category[0].toUpperCase() + category.substring(1);
+
+  final int id;
+  final String content;
+  final String category;
+  final DateTime updatedAtUtc;
+
+  /// The conversation's address, when the memory came from chat.
+  final String? sourceConversationId;
+  final String? sourceConversationTitle;
+}
+
+/// Whether the server has a speech service for each direction.
+class SpeechStatus {
+  SpeechStatus({
+    required this.speechToText,
+    required this.textToSpeech,
+    this.baseUrl,
+    this.sttModel,
+    this.ttsModel,
+    this.ttsVoice,
+    this.hasApiKey = false,
+  });
+
+  factory SpeechStatus.fromJson(Map<String, dynamic> json) => SpeechStatus(
+    speechToText: json['speechToText'] as bool? ?? false,
+    textToSpeech: json['textToSpeech'] as bool? ?? false,
+    baseUrl: json['baseUrl'] as String?,
+    sttModel: json['sttModel'] as String?,
+    ttsModel: json['ttsModel'] as String?,
+    ttsVoice: json['ttsVoice'] as String?,
+    hasApiKey: json['hasApiKey'] as bool? ?? false,
+  );
+
+  final bool speechToText;
+  final bool textToSpeech;
+  final String? baseUrl;
+  final String? sttModel;
+  final String? ttsModel;
+  final String? ttsVoice;
+
+  /// The key itself never comes back, only whether one is stored.
+  final bool hasApiKey;
+}
+
+/// Whether push is set up on the server, and for which Firebase project.
+class PushStatus {
+  PushStatus({required this.configured, this.projectId});
+
+  factory PushStatus.fromJson(Map<String, dynamic> json) =>
+      PushStatus(configured: json['configured'] as bool? ?? false, projectId: json['projectId'] as String?);
+
+  final bool configured;
+  final String? projectId;
+}
+
+/// Firebase client options for this install's own Firebase project. Identifiers, not secrets.
+class FcmClientOptions {
+  FcmClientOptions({
+    required this.apiKey,
+    required this.appId,
+    required this.messagingSenderId,
+    required this.projectId,
+  });
+
+  factory FcmClientOptions.fromJson(Map<String, dynamic> json) => FcmClientOptions(
+    apiKey: json['apiKey'] as String,
+    appId: json['appId'] as String,
+    messagingSenderId: json['messagingSenderId'] as String,
+    projectId: json['projectId'] as String,
+  );
+
+  final String apiKey;
+  final String appId;
+  final String messagingSenderId;
+  final String projectId;
+}
+
+/// Instance settings, as returned for prefilling the settings screen.
+///
+/// The provider API key is deliberately absent: the server never returns it, only whether
+/// one is stored. Sending a blank key back means "leave the stored one alone".
+class InstanceSettings {
+  InstanceSettings({
+    required this.assistantNickname,
+    required this.personaTemplate,
+    required this.aiProvider,
+    required this.aiModel,
+    required this.aiBaseUrl,
+    required this.timeZone,
+    required this.features,
+    required this.hasApiKey,
+  });
+
+  factory InstanceSettings.fromJson(Map<String, dynamic> json) => InstanceSettings(
+    assistantNickname: json['assistantNickname'] as String? ?? '',
+    personaTemplate: json['personaTemplate'] as String? ?? '',
+    aiProvider: json['aiProvider'] as String? ?? 'anthropic',
+    aiModel: json['aiModel'] as String? ?? '',
+    aiBaseUrl: json['aiBaseUrl'] as String? ?? '',
+    timeZone: json['timeZone'] as String? ?? '',
+    features: ((json['features'] as Map<String, dynamic>?) ?? {}).map((k, v) => MapEntry(k, v == true)),
+    hasApiKey: json['hasAnthropicApiKey'] == true,
+  );
+
+  final String assistantNickname;
+  final String personaTemplate;
+  final String aiProvider;
+  final String aiModel;
+  final String aiBaseUrl;
+  final String timeZone;
+  final Map<String, bool> features;
+  final bool hasApiKey;
+}
+
+/// Result of testing the configured AI provider.
+class ConnectionTest {
+  ConnectionTest({required this.ok, required this.message});
+
+  factory ConnectionTest.fromJson(Map<String, dynamic> json) =>
+      ConnectionTest(ok: json['ok'] == true, message: json['message'] as String? ?? '');
+
+  final bool ok;
+  final String message;
+}
+
+/// What the server found: its Ollama, and whether that already has the recommended model.
+class LocalModelStatus {
+  LocalModelStatus({
+    required this.found,
+    required this.address,
+    required this.model,
+    required this.displayName,
+    required this.sizeBytes,
+    required this.license,
+    required this.notice,
+    required this.installed,
+    required this.message,
+  });
+
+  factory LocalModelStatus.fromJson(Map<String, dynamic> json) => LocalModelStatus(
+    found: json['found'] == true,
+    address: json['address'] as String?,
+    model: json['model'] as String? ?? '',
+    displayName: json['displayName'] as String? ?? 'Aimsby model',
+    sizeBytes: (json['sizeBytes'] as num?)?.toInt() ?? 0,
+    license: json['license'] as String? ?? '',
+    notice: json['notice'] as String? ?? '',
+    installed: json['installed'] == true,
+    message: json['message'] as String? ?? '',
+  );
+
+  final bool found;
+  final String? address;
+  final String model;
+  final String displayName;
+  final int sizeBytes;
+  final String license;
+  final String notice;
+  final bool installed;
+  final String message;
+}
+
+/// One line of the model download stream: a step, or the end ([done]), or what went wrong ([error]).
+class ModelPullLine {
+  ModelPullLine({this.status, this.completed, this.total, this.done = false, this.error});
+
+  factory ModelPullLine.fromJson(Map<String, dynamic> json) => ModelPullLine(
+    status: json['status'] as String?,
+    completed: (json['completed'] as num?)?.toInt(),
+    total: (json['total'] as num?)?.toInt(),
+    done: json['done'] == true,
+    error: json['error'] as String?,
+  );
+
+  final String? status;
+  final int? completed;
+  final int? total;
+  final bool done;
+  final String? error;
+
+  /// How far, from 0 to 1, when the server says; null while it does not.
+  double? get fraction => total != null && total! > 0 && completed != null ? completed! / total! : null;
+}
+
+/// Thin client for the Aimsby server API.
+class AimsbyApi {
+  AimsbyApi({required this.serverUrl});
+
+  final String serverUrl;
+  String? _token;
+
+  bool get isLoggedIn => _token != null;
+
+  Future<String?> login(String username, String password) async {
+    final response = await http
+        .post(
+          Uri.parse('$serverUrl/api/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'username': username, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode != 200) {
+      // A proxy can answer with an empty or HTML body; that must still read as a wrong
+      // password, not as "could not reach the server".
+      if (response.statusCode == 401) return 'Incorrect username or password.';
+      return _errorFrom(response);
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    _token = body['accessToken'] as String;
+    return null; // success
+  }
+
+  // --- Goals ---------------------------------------------------------------
+
+  /// One goal by its key ("GOAL-3"), for its quick view or page.
+  Future<Goal> getGoal(String key) async => Goal.fromJson(await _get('/api/goals/$key') as Map<String, dynamic>);
+
+  Future<List<Goal>> getGoals() async {
+    final data = await _get('/api/goals') as List<dynamic>;
+    return data.map((e) => Goal.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// A goal by its calendar slot: [quarter] (1-4) or [month] (1-12) of [year], or for a year
+  /// goal its start day ([periodStart], today when null). [parentId] nests it.
+  Future<void> createGoal({
+    required String title,
+    required String periodType,
+    required int year,
+    int? quarter,
+    int? month,
+    String? periodStart, // yyyy-MM-dd
+    int? parentId,
+  }) async {
+    await _post('/api/goals', {
+      'title': title,
+      'periodType': periodType,
+      'year': year,
+      'quarter': ?quarter,
+      'month': ?month,
+      'periodStart': ?periodStart,
+      'parentId': ?parentId,
+    });
+  }
+
+  /// Under [parentId] in the slot given (its dates follow), or detached when [parentId] is null.
+  Future<void> moveGoal(int id, {int? parentId, int? year, int? quarter, int? month}) =>
+      _put('/api/goals/$id/parent', {'parentId': parentId, 'year': ?year, 'quarter': ?quarter, 'month': ?month});
+
+  /// Title, description (empty clears it) and priority; null leaves a field as it is.
+  Future<void> updateGoal(int id, {String? title, String? description, String? priority}) => _put('/api/goals/$id', {
+    'title': ?title,
+    if (description != null && description.trim().isEmpty) 'clearDescription': true else 'description': ?description,
+    'priority': ?priority,
+  });
+
+  Future<void> setGoalProgress(int id, int progress) => _put('/api/goals/$id', {'progress': progress});
+
+  Future<void> setGoalStatus(int id, String status) => _put('/api/goals/$id/status', {'status': status});
+
+  /// Deletes a goal; its tasks are kept ('keep'), deleted ('delete'), or reassigned
+  /// ('reassign', with [reassign] mapping each task key to a monthly goal key or null).
+  Future<void> deleteGoal(int id, {String taskAction = 'keep', Map<String, String?>? reassign}) =>
+      _delete('/api/goals/$id', {'taskAction': taskAction, 'reassign': reassign});
+
+  // --- Planner -------------------------------------------------------------
+
+  Future<List<PlannerItem>> getPlannerDay(String date) async {
+    final data = await _get('/api/planner?date=$date') as Map<String, dynamic>;
+    return (data['items'] as List<dynamic>).map((e) => PlannerItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// The events from [from] to [to] (inclusive, yyyy-MM-dd), repeats expanded, in day order. An event
+  /// over several days comes once, under its first day in the range.
+  Future<List<PlannerItem>> getPlannerRange(String from, String to) async {
+    final days = await _get('/api/planner?from=$from&to=$to') as List<dynamic>;
+    return [
+      for (final day in days.cast<Map<String, dynamic>>())
+        for (final item in (day['items'] as List<dynamic>).cast<Map<String, dynamic>>()) PlannerItem.fromJson(item),
+    ];
+  }
+
+  /// Creates an event. Times are "HH:mm"; no [scheduledTime] means all day. [endDate] is the last day
+  /// of an event over several days.
+  Future<void> createEvent({
+    required String title,
+    required String date,
+    String? endDate,
+    String? notes,
+    String? scheduledTime,
+    String? endTime,
+    int? notifyBeforeMinutes,
+    String? recurrence,
+    int? goalId,
+    int? taskId,
+  }) async {
+    await _post('/api/planner/items', {
+      'title': title,
+      'date': date,
+      'endDate': ?endDate,
+      'notes': ?notes,
+      'scheduledTime': ?scheduledTime,
+      'endTime': ?endTime,
+      'notifyBeforeMinutes': ?notifyBeforeMinutes,
+      'recurrence': ?recurrence,
+      'goalId': ?goalId,
+      'taskId': ?taskId,
+    });
+  }
+
+  /// Changes an event. [change] holds only what changed (the server's field names, with its clear
+  /// flags to remove a value); for a repeating event, [scope] and [occurrence] say which.
+  Future<void> updateEvent(int id, Map<String, Object?> change, {EditScope? scope, String? occurrence}) =>
+      _put('/api/planner/items/$id${_target(scope, occurrence)}', change);
+
+  /// Adds an item to a day. With [taskId], the item is a day's work on that board task and
+  /// takes its title and goal when [title] is empty.
+  Future<void> addPlannerItem({
+    required String title,
+    required String date, // yyyy-MM-dd
+    String? scheduledTime, // "HH:mm" or null
+    int? taskId,
+  }) async {
+    await _post('/api/planner/items', {
+      'title': title,
+      'date': date,
+      'scheduledTime': ?scheduledTime,
+      'taskId': ?taskId,
+    });
+  }
+
+  /// Sets planned / done / skipped; a repeating event needs the [occurrence].
+  Future<void> setPlannerStatus(int id, String status, {String? occurrence}) =>
+      _put('/api/planner/items/$id/status${occurrence == null ? '' : '?occurrence=$occurrence'}', {'status': status});
+
+  Future<void> movePlannerItem(int id, String date) => _put('/api/planner/items/$id/date', {'date': date});
+
+  Future<void> deletePlannerItem(int id, {EditScope? scope, String? occurrence}) =>
+      _delete('/api/planner/items/$id${_target(scope, occurrence)}');
+
+  static String _target(EditScope? scope, String? occurrence) =>
+      scope == null ? '' : '?scope=${scope.wire}&occurrence=$occurrence';
+
+  // --- Sprint board --------------------------------------------------------
+
+  /// The running sprint's board. Its sprint is null when nothing is running.
+  Future<BoardView> getBoard() async => BoardView.fromJson(await _get('/api/board') as Map<String, dynamic>);
+
+  /// The plan: sprints to come and the backlog, for picking where a task goes.
+  Future<PlanView> getPlan() async => PlanView.fromJson(await _get('/api/board/plan') as Map<String, dynamic>);
+
+  /// Started sprints, newest first; [count] is how many (the server allows two years of them).
+  Future<SprintReport> getSprintReport({int count = 104}) async =>
+      SprintReport.fromJson(await _get('/api/board/sprints?count=$count') as Map<String, dynamic>);
+
+  Future<SprintDetail> getSprintDetail(String key) async =>
+      SprintDetail.fromJson(await _get('/api/board/sprints/$key') as Map<String, dynamic>);
+
+  /// [startsOn] is a day ("2026-10-04"); the server adds the start time and works out the end.
+  Future<void> createSprint({String? name, String? startsOn}) =>
+      _post('/api/board/sprints', {'name': ?name, 'startsOn': ?startsOn});
+
+  /// A blank [name] clears it; a new [startsOn] moves the end to the first Sunday after it.
+  Future<void> updateSprint(String key, {String? name, String? startsOn}) => _put('/api/board/sprints/$key', {
+    if (name != null && name.trim().isEmpty) 'clearName': true else 'name': ?name,
+    'startsOn': ?startsOn,
+  });
+
+  Future<void> startSprint(String key) => _post('/api/board/sprints/$key/start', const {});
+
+  /// Unfinished work moves to [moveUnfinishedToSprintKey], or to the next planned sprint when it
+  /// is null, or to the backlog with [toBacklog].
+  Future<void> completeSprint(String key, {String? moveUnfinishedToSprintKey, bool toBacklog = false}) => _post(
+    '/api/board/sprints/$key/complete',
+    {'moveUnfinishedToSprintKey': ?moveUnfinishedToSprintKey, 'toBacklog': toBacklog},
+  );
+
+  /// Only a planned sprint can go; its tasks return to the backlog.
+  Future<void> deleteSprint(String key) => _delete('/api/board/sprints/$key');
+
+  /// [sprintKey] like "SPRINT-2"; omit it to put the task in the backlog.
+  Future<void> createTask({
+    required String title,
+    String? priority,
+    int? points,
+    int? goalId,
+    String? sprintKey,
+    bool acknowledgeScopeChange = false,
+  }) => _post('/api/board/tasks', {
+    'title': title,
+    'priority': ?priority,
+    'points': ?points,
+    'goalId': ?goalId,
+    'sprintKey': ?sprintKey,
+    'acknowledgeScopeChange': acknowledgeScopeChange,
+  });
+
+  /// [description] null leaves it as it is; an empty one clears it.
+  Future<void> updateTask(
+    String key, {
+    String? title,
+    int? points,
+    int? goalId,
+    String? description,
+    String? priority,
+  }) => _put('/api/board/tasks/$key', {
+    'title': ?title,
+    'priority': ?priority,
+    'points': ?points,
+    'clearPoints': points == null,
+    'goalId': ?goalId,
+    'clearGoal': goalId == null,
+    if (description != null && description.trim().isEmpty) 'clearDescription': true else 'description': ?description,
+  });
+
+  /// One task as it is now, for a quick view or its page.
+  Future<BoardTask> getTask(String key) async =>
+      BoardTask.fromJson((await _get('/api/board/tasks/$key') as Map<String, dynamic>)['task'] as Map<String, dynamic>);
+
+  // --- Attachments on tasks and goals ([itemType] is "task" or "goal") ----
+
+  Future<List<WorkItemAttachment>> getAttachments(String itemType, String key) async {
+    final data = await _get('/api/items/$itemType/$key/attachments') as List<dynamic>;
+    return data.map((e) => WorkItemAttachment.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// Uploads a file as multipart/form-data, the shape the server's `IFormFile` expects.
+  Future<void> uploadAttachment(
+    String itemType,
+    String key, {
+    required String filePath,
+    required String fileName,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$serverUrl/api/items/$itemType/$key/attachments'));
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(await http.MultipartFile.fromPath('file', filePath, filename: fileName));
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(await request.send().timeout(const Duration(seconds: 120)));
+    } on TimeoutException {
+      throw ApiException('The upload took too long.');
+    }
+    if (response.statusCode == 401) {
+      _token = null;
+      throw ApiException('Session expired. Log in again.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) throw ApiException(_errorFrom(response));
+  }
+
+  /// The file's bytes, to save on the phone.
+  Future<List<int>> downloadAttachment(int id) async {
+    final http.Response response;
+    try {
+      response = await http
+          .get(Uri.parse('$serverUrl/api/items/attachments/$id/download'), headers: _headers)
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      throw ApiException('The download took too long.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) throw ApiException(_errorFrom(response));
+    return response.bodyBytes;
+  }
+
+  Future<void> deleteAttachment(int id) => _delete('/api/items/attachments/$id');
+
+  // --- Push and speech setup (admin) --------------------------------------
+
+  Future<PushStatus> getPushStatus() async =>
+      PushStatus.fromJson(await _get('/api/setup/push') as Map<String, dynamic>);
+
+  /// The two Firebase files' contents; the server checks they belong to the same project.
+  Future<PushStatus> setPushConfig({required String serviceAccountJson, required String googleServicesJson}) async =>
+      PushStatus.fromJson(
+        await _put('/api/setup/push', {
+              'serviceAccountJson': serviceAccountJson,
+              'googleServicesJson': googleServicesJson,
+            })
+            as Map<String, dynamic>,
+      );
+
+  Future<void> clearPushConfig() => _delete('/api/setup/push');
+
+  /// Blank fields clear; a null field is left as it is (the key included).
+  Future<SpeechStatus> updateSpeech({
+    String? baseUrl,
+    String? sttModel,
+    String? ttsModel,
+    String? ttsVoice,
+    String? apiKey,
+  }) async => SpeechStatus.fromJson(
+    await _put('/api/speech', {
+          'baseUrl': ?baseUrl,
+          'sttModel': ?sttModel,
+          'ttsModel': ?ttsModel,
+          'ttsVoice': ?ttsVoice,
+          'apiKey': ?apiKey,
+        })
+        as Map<String, dynamic>,
+  );
+
+  Future<ConnectionTest> testSpeech({
+    String? baseUrl,
+    String? sttModel,
+    String? ttsModel,
+    String? ttsVoice,
+    String? apiKey,
+  }) async => ConnectionTest.fromJson(
+    await _post('/api/speech/test', {
+          'baseUrl': ?baseUrl,
+          'sttModel': ?sttModel,
+          'ttsModel': ?ttsModel,
+          'ttsVoice': ?ttsVoice,
+          'apiKey': ?apiKey,
+        })
+        as Map<String, dynamic>,
+  );
+
+  // --- Comments on tasks and goals ([itemType] is "task" or "goal") -------
+
+  Future<List<WorkItemComment>> getComments(String itemType, String key) async {
+    final data = await _get('/api/items/$itemType/$key/comments') as List<dynamic>;
+    return data.map((e) => WorkItemComment.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> addComment(String itemType, String key, String body) =>
+      _post('/api/items/$itemType/$key/comments', {'body': body});
+
+  Future<void> updateComment(int id, String body) => _put('/api/items/comments/$id', {'body': body});
+
+  Future<void> deleteComment(int id) => _delete('/api/items/comments/$id');
+
+  /// Moves a task to [column]; [sprintKey] names the sprint, and is ignored for the backlog.
+  Future<void> moveTask(
+    String key, {
+    required String column,
+    String? sprintKey,
+    int? index,
+    bool acknowledgeScopeChange = false,
+  }) => _put('/api/board/tasks/$key/move', {
+    'column': column,
+    'sprintKey': ?sprintKey,
+    'index': ?index,
+    'acknowledgeScopeChange': acknowledgeScopeChange,
+  });
+
+  Future<void> deleteTask(String key) => _delete('/api/board/tasks/$key');
+
+  // --- Reminders -----------------------------------------------------------
+
+  Future<List<Reminder>> getReminders({bool includeCompleted = false}) async {
+    final data = await _get('/api/reminders?includeCompleted=$includeCompleted') as List<dynamic>;
+    return data.map((e) => Reminder.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// [dueAtLocal] is a wall-clock "yyyy-MM-ddTHH:mm" read in the install's zone.
+  Future<void> createReminder(String message, String dueAtLocal) =>
+      _post('/api/reminders', {'message': message, 'dueAtLocal': dueAtLocal});
+
+  Future<void> cancelReminder(int id) => _post('/api/reminders/$id/cancel', const {});
+
+  Future<void> deleteReminder(int id) => _delete('/api/reminders/$id');
+
+  // --- Proposed changes ------------------------------------------------------
+
+  /// Runs a change the assistant proposed. The only route by which a model-requested
+  /// write reaches the database.
+  Future<PendingAction> confirmAction(String id) async {
+    final data = await _post('/api/chat/actions/$id/confirm', const {});
+    return PendingAction.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Declines a proposed change; nothing is executed.
+  Future<PendingAction> discardAction(String id) async {
+    final data = await _post('/api/chat/actions/$id/discard', const {});
+    return PendingAction.fromJson(data as Map<String, dynamic>);
+  }
+
+  // --- Push devices --------------------------------------------------------
+
+  /// The Firebase client options this install's own Firebase project uses, or null when the
+  /// admin has not set up push. Fetched rather than compiled in, so the release APK carries no
+  /// Firebase config and each self-hosted instance brings its own.
+  Future<FcmClientOptions?> getPushConfig() async {
+    final data = await _get('/api/devices/push-config');
+    return data == null ? null : FcmClientOptions.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Registers this device's push token. Idempotent: re-sending a known token only refreshes it.
+  Future<void> registerDevice(String token, {required String platform, String? deviceName}) =>
+      _post('/api/devices', {'token': token, 'platform': platform, 'deviceName': ?deviceName});
+
+  // --- Conversations -------------------------------------------------------
+
+  Future<List<ConversationSummary>> getConversations() async {
+    final data = await _get('/api/chat/conversations') as List<dynamic>;
+    return data.map((e) => ConversationSummary.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<ConversationDetail> getConversation(String idOrPublicId) async {
+    final data = await _get('/api/chat/conversations/$idOrPublicId');
+    return ConversationDetail.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteConversation(String idOrPublicId) => _delete('/api/chat/conversations/$idOrPublicId');
+
+  // --- Speech (the server's optional speech service) ----------------------
+
+  Future<SpeechStatus> getSpeechStatus() async =>
+      SpeechStatus.fromJson(await _get('/api/speech') as Map<String, dynamic>);
+
+  /// Uploads a recording and returns what the server's speech service heard.
+  /// [language] is the speaker's language ("en"): without it whisper guesses for each recording,
+  /// and on a short one it guessed Chinese and wrote Chinese characters (owner, 2026-10-24).
+  Future<String> transcribe(String filePath, {String? language}) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$serverUrl/api/speech/transcribe'));
+    if (_token != null) request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(await http.MultipartFile.fromPath('audio', filePath));
+    if (language != null && language.isNotEmpty) request.fields['language'] = language;
+
+    final http.Response response;
+    try {
+      final streamed = await request.send().timeout(const Duration(seconds: 120));
+      response = await http.Response.fromStream(streamed);
+    } on TimeoutException {
+      throw ApiException('The speech service took too long.');
+    }
+    if (response.statusCode == 401) {
+      _token = null;
+      throw ApiException('Session expired. Log in again.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_errorFrom(response), code: _codeFrom(response));
+    }
+    return ((jsonDecode(response.body) as Map<String, dynamic>)['text'] as String? ?? '').trim();
+  }
+
+  /// A reply spoken by the server's speech service, as audio bytes (mp3).
+  Future<List<int>> speak(String text) async {
+    final http.Response response;
+    try {
+      response = await http
+          .post(Uri.parse('$serverUrl/api/speech/speak'), headers: _headers, body: jsonEncode({'text': text}))
+          .timeout(const Duration(seconds: 60));
+    } on TimeoutException {
+      throw ApiException('The speech service took too long.');
+    }
+    if (response.statusCode == 401) {
+      _token = null;
+      throw ApiException('Session expired. Log in again.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_errorFrom(response), code: _codeFrom(response));
+    }
+    return response.bodyBytes;
+  }
+
+  // --- Notes ---------------------------------------------------------------
+
+  /// Every note, the latest edited first.
+  Future<List<NoteDto>> getNotes() async {
+    final data = await _get('/api/notes') as List<dynamic>;
+    return data.map((e) => NoteDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<NoteDto> createNote(String text) async =>
+      NoteDto.fromJson(await _post('/api/notes', {'text': text}) as Map<String, dynamic>);
+
+  Future<NoteDto> updateNote(int id, String text) async =>
+      NoteDto.fromJson(await _put('/api/notes/$id', {'text': text}) as Map<String, dynamic>);
+
+  Future<void> deleteNote(int id) => _delete('/api/notes/$id');
+
+  /// Makes the note a task in the backlog (its first line the title) and removes the note;
+  /// returns the task's key, like "TASK-12".
+  Future<String> moveNoteToBacklog(int id) async =>
+      ((await _post('/api/notes/$id/to-backlog', <String, Object?>{})) as Map<String, dynamic>)['key'] as String;
+
+  // --- Memories ------------------------------------------------------------
+
+  Future<List<MemoryDto>> getMemories() async {
+    final data = await _get('/api/memories') as List<dynamic>;
+    return data.map((e) => MemoryDto.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<MemoryDto> createMemory(String content, String category) async => MemoryDto.fromJson(
+    await _post('/api/memories', {'content': content, 'category': category}) as Map<String, dynamic>,
+  );
+
+  Future<MemoryDto> updateMemory(int id, String content, String category) async => MemoryDto.fromJson(
+    await _put('/api/memories/$id', {'content': content, 'category': category}) as Map<String, dynamic>,
+  );
+
+  Future<void> deleteMemory(int id) => _delete('/api/memories/$id');
+
+  /// On: the assistant saves memories and shows a receipt. Off: each one is a card first.
+  Future<bool> getMemoryAutoSave() async =>
+      ((await _get('/api/memories/settings')) as Map<String, dynamic>)['autoSave'] as bool? ?? true;
+
+  Future<bool> setMemoryAutoSave(bool autoSave) async =>
+      ((await _put('/api/memories/settings', {'autoSave': autoSave})) as Map<String, dynamic>)['autoSave'] as bool? ??
+      autoSave;
+
+  // --- Settings ------------------------------------------------------------
+
+  Future<InstanceSettings> getSettings() async {
+    final data = await _get('/api/setup');
+    return InstanceSettings.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Sends only the fields given; the server leaves anything omitted untouched.
+  Future<void> updateSettings(Map<String, Object?> changes) => _put('/api/setup', changes);
+
+  /// What the assistant knows about the user; sent with every message.
+  Future<String> getAboutMe() async =>
+      ((await _get('/api/profile')) as Map<String, dynamic>)['aboutMe'] as String? ?? '';
+
+  Future<void> updateAboutMe(String aboutMe) => _put('/api/profile', {'aboutMe': aboutMe});
+
+  Future<ConnectionTest> testConnection(Map<String, Object?> settings) async {
+    final data = await _post('/api/setup/test', settings);
+    return ConnectionTest.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Looks for Ollama at [address] when given, else where the server usually finds it.
+  Future<LocalModelStatus> getLocalModel({String? address}) async {
+    final query = address == null || address.trim().isEmpty
+        ? ''
+        : '?address=${Uri.encodeQueryComponent(address.trim())}';
+    final data = await _get('/api/setup/local-model$query');
+    return LocalModelStatus.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Downloads the recommended model into the Ollama at [address], one line per step. Cancelling
+  /// the subscription closes the connection, which stops the download.
+  Stream<ModelPullLine> pullLocalModel(String address) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', Uri.parse('$serverUrl/api/setup/local-model/pull'))
+        ..headers.addAll(_headers)
+        ..body = jsonEncode({'address': address});
+      final response = await client.send(request);
+      if (response.statusCode == 401) {
+        _token = null;
+        throw ApiException('Session expired. Log in again.');
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException('The server refused the download (${response.statusCode}).');
+      }
+      final lines = response.stream.transform(utf8.decoder).transform(const LineSplitter());
+      await for (final line in lines) {
+        if (line.trim().isEmpty) continue;
+        yield ModelPullLine.fromJson(jsonDecode(line) as Map<String, dynamic>);
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  // --- Chat (SSE) ----------------------------------------------------------
+
+  /// Sends a chat message and yields SSE events as they stream in.
+  Stream<ChatEvent> streamChat(String message, {int? conversationId, String? mode}) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request('POST', Uri.parse('$serverUrl/api/chat'))
+        ..headers['Content-Type'] = 'application/json'
+        ..headers['Authorization'] = 'Bearer $_token'
+        ..body = jsonEncode({'message': message, 'conversationId': ?conversationId, 'mode': ?mode});
+
+      final response = await client.send(request);
+      if (response.statusCode == 401) {
+        _token = null;
+        yield ChatEvent(type: 'error', error: 'Session expired. Log in again.');
+        return;
+      }
+
+      // Parse the SSE wire format: "event: x" / "data: {...}" / blank line.
+      final lines = response.stream.transform(utf8.decoder).transform(const LineSplitter());
+      await for (final line in lines) {
+        if (line.startsWith('data: ')) {
+          final payload = line.substring(6);
+          yield ChatEvent.fromJson(jsonDecode(payload) as Map<String, dynamic>);
+        }
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  // --- Authed request helpers ---------------------------------------------
+
+  Map<String, String> get _headers => {
+    'Content-Type': 'application/json',
+    if (_token != null) 'Authorization': 'Bearer $_token',
+  };
+
+  Future<dynamic> _get(String path) => _send(() => http.get(Uri.parse('$serverUrl$path'), headers: _headers));
+
+  Future<dynamic> _post(String path, Object body) =>
+      _send(() => http.post(Uri.parse('$serverUrl$path'), headers: _headers, body: jsonEncode(body)));
+
+  Future<dynamic> _put(String path, Object body) =>
+      _send(() => http.put(Uri.parse('$serverUrl$path'), headers: _headers, body: jsonEncode(body)));
+
+  Future<dynamic> _delete(String path, [Object? body]) => _send(
+    () => http.delete(Uri.parse('$serverUrl$path'), headers: _headers, body: body == null ? null : jsonEncode(body)),
+  );
+
+  /// Runs a request, maps 401 to a cleared session, and turns any non-2xx into
+  /// an [ApiException] carrying the server's `error` message and `code` when present.
+  Future<dynamic> _send(Future<http.Response> Function() request) async {
+    final http.Response response;
+    try {
+      response = await request().timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      throw ApiException('The server did not respond.');
+    }
+
+    if (response.statusCode == 401) {
+      _token = null;
+      throw ApiException('Session expired. Log in again.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(_errorFrom(response), code: _codeFrom(response));
+    }
+    if (response.body.isEmpty) return null;
+    return jsonDecode(response.body);
+  }
+
+  String? _codeFrom(http.Response response) {
+    try {
+      final code = (jsonDecode(response.body) as Map<String, dynamic>)['code'];
+      return code is String ? code : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _errorFrom(http.Response response) {
+    try {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final message = body['error'];
+      if (message is String && message.isNotEmpty) return message;
+    } catch (_) {
+      // Non-JSON body — fall through to a generic message.
+    }
+    return 'Request failed (${response.statusCode}).';
+  }
+}

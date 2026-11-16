@@ -1,9 +1,9 @@
-"""PersonaOS updater: the one container that may control Docker. It installs the release the API
+"""Aimsby updater: the one container that may control Docker. It installs the release the API
 asks for, and nothing else.
 
 The API writes <updates>/request.json ({"id", "version"}); this loop picks it up, then:
   1. backs up the data volume to ./backups next to the compose file,
-  2. sets PERSONAOS_VERSION in .env,
+  2. sets AIMSBY_VERSION in .env (and PERSONAOS_VERSION, the older name, if .env has it),
   3. pulls the images and restarts every service but itself,
   4. waits for the API to answer with the new version,
   5. on any failure puts the old version back and restarts again.
@@ -28,6 +28,8 @@ from pathlib import Path
 
 UPDATES = Path(os.environ.get("UPDATES", "/updates"))
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
+# Legacy id, kept on purpose: the compose project name prefixes the data volumes (personaos_api-data),
+# so renaming it would orphan every install's data.
 PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", "personaos")
 DOCKER = os.environ.get("DOCKER", "docker").split()
 API_URL = os.environ.get("API_URL", "http://api:8080")
@@ -100,17 +102,28 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return result
 
 
+# AIMSBY_VERSION is the current key. PERSONAOS_VERSION is the name before the rename to Aimsby:
+# installs set up earlier still have it, so it is read as a fallback and kept up to date.
+VERSION_KEYS = ("AIMSBY_VERSION", "PERSONAOS_VERSION")
+
+
 def current_version() -> str:
-    found = re.findall(r"^PERSONAOS_VERSION=(.*)$", ENV_FILE.read_text(encoding="utf-8"), re.MULTILINE)
-    return found[-1].strip() if found else "latest"
+    text = ENV_FILE.read_text(encoding="utf-8")
+    for key in VERSION_KEYS:
+        found = re.findall(rf"^{key}=(.*)$", text, re.MULTILINE)
+        if found:
+            return found[-1].strip()
+    return "latest"
 
 
 def set_version(version: str) -> None:
+    """Rewrites whichever version keys .env has; a .env with neither gets AIMSBY_VERSION."""
     text = ENV_FILE.read_text(encoding="utf-8")
-    if re.search(r"^PERSONAOS_VERSION=", text, re.MULTILINE):
-        text = re.sub(r"^PERSONAOS_VERSION=.*$", f"PERSONAOS_VERSION={version}", text, flags=re.MULTILINE)
-    else:
-        text = text.rstrip("\n") + f"\nPERSONAOS_VERSION={version}\n"
+    present = [key for key in VERSION_KEYS if re.search(rf"^{key}=", text, re.MULTILINE)]
+    for key in present:
+        text = re.sub(rf"^{key}=.*$", f"{key}={version}", text, flags=re.MULTILINE)
+    if not present:
+        text = text.rstrip("\n") + f"\nAIMSBY_VERSION={version}\n"
     ENV_FILE.write_text(text, encoding="utf-8")
 
 
@@ -213,11 +226,11 @@ def replace_self() -> None:
 
 
 def main() -> None:
-    log(f"PersonaOS updater watching {UPDATES} for {PROJECT_DIR}")
+    log(f"Aimsby updater watching {UPDATES} for {PROJECT_DIR}")
     handled = (read_json(STATUS) or {}).get("requestId")
     while not ENV_FILE.exists():
-        # PERSONAOS_DIR does not point at the compose folder: say so, and do nothing.
-        Job(None, None).status("not-set-up", f"No .env in {PROJECT_DIR}: set PERSONAOS_DIR in .env to the folder with docker-compose.yml.")
+        # AIMSBY_DIR (or the older PERSONAOS_DIR) does not point at the compose folder: say so, and do nothing.
+        Job(None, None).status("not-set-up", f"No .env in {PROJECT_DIR}: set AIMSBY_DIR in .env to the folder with docker-compose.yml.")
         if os.environ.get("ONCE") == "1":
             return
         time.sleep(POLL_SECONDS)

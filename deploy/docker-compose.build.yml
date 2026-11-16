@@ -6,20 +6,20 @@ services:
     build:
       context: ..
       dockerfile: src/backend/Dockerfile
-    image: personaos-api:local
+    image: aimsby-api:local
 
   web:
     build:
-      context: ../src/frontend/PersonaOS.Web
+      context: ../src/frontend/Aimsby.Web
       dockerfile: Dockerfile
-    image: personaos-web:local
+    image: aimsby-web:local
 
   whisper:
     build: ./speech/whisper
-    image: personaos-whisper:local
+    image: aimsby-whisper:local
 
   updater:
     build: ./updater
-    image: personaos-updater:local
+    image: aimsby-updater:local
     environment:
-      SELF_IMAGE: personaos-updater:local
+      SELF_IMAGE: aimsby-updater:local

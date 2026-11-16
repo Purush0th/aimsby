@@ -1,6 +1,6 @@
 """The audit report for one training run: what went in, how training went, and stock vs trained.
 
-    python -I training/report.py data/training/runs/2026-11-05 [--stock qwen2.5:3b-instruct --trained personaos-qwen2.5:3b]
+    python -I training/report.py data/training/runs/2026-11-05 [--stock qwen2.5:3b-instruct --trained aimsby-qwen2.5:3b]
 
 Reads the run folder overnight.ps1 fills (dataset/, train.log, bench/*.json, traces) and writes
 report.md next to them. The verdict follows the project's rule: the trained model is recommended
@@ -51,7 +51,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("run")
     parser.add_argument("--stock", default="qwen2.5:3b-instruct")
-    parser.add_argument("--trained", default="personaos-qwen2.5:3b")
+    parser.add_argument("--trained", default="aimsby-qwen2.5:3b")
     parser.add_argument("--bench", default="bench", help="the run's folder of benchmark results (bench.ps1 writes others)")
     parser.add_argument("--out", default=None, help="where to write the report (default: the run's report.md)")
     parser.add_argument("--traces", nargs="*", default=None, help="trace files used (default: the run's traces.jsonl plus traces listed in inputs.txt)")
