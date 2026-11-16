@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-16 - rename to Aimsby done in code on `rename/aimsby` (uncommitted)_
+_Last updated: 2026-11-16 - rename to Aimsby committed on dev (`0b15c2c`), repo is `Purush0th/aimsby`_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,10 +8,10 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Rename to Aimsby: code done on branch `rename/aimsby` (worktree `D:\Projects\aimsby-rename`,
-  uncommitted, all tests green). Owner: India TM check, domain/handles, wordmark sign-off, a
-  Firebase Android app for `com.aimsby.app`, rename the GitHub repo, then commit, merge and release
-  (server first; the phone is a new package, so a reinstall). Then check an upgrade on prod.
+- Rename to Aimsby: on dev (`0b15c2c`, pushed), repo renamed to `Purush0th/aimsby`, not released.
+  Owner: India TM check, domain/handles, wordmark sign-off, then release (server first; the phone
+  is a new package, so a reinstall), upload the new google-services.json in web Settings, and
+  check the upgrade on prod.
 - A11. App bug first: the false-claim check does not cover a tool that returned an error
   ("GOAL-10 was created" after a refusal). See `Ai/ActionClaimDetector.cs` and `ClaimCheckGuard`
   in `Ai/Guards/ReplyGuards.cs`; add a failing test, fix, then `model-check.ps1 -Runs 5`. Then the training examples in TODO.md A11.

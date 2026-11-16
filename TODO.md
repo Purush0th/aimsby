@@ -96,14 +96,14 @@ Release and infrastructure:
       gate: owner counted prod's own updates (alpha.20 to alpha.29, data, keys and sign-in kept) as
       the test (2026-11-08).
 - [~] Rename to **Aimsby** (owner chose it 2026-11-16; "PersonaOS" is taken). Plan:
-      [docs/rename-aimsby.md](docs/rename-aimsby.md). 2026-11-16: Phases 1-3 done in the code on
-      branch `rename/aimsby` (worktree `D:\Projects\aimsby-rename`), uncommitted: Aimsby.* projects
+      [docs/rename-aimsby.md](docs/rename-aimsby.md). 2026-11-16: Phases 1-3 done in the code,
+      commit `0b15c2c` on dev, pushed; repo renamed to `Purush0th/aimsby`: Aimsby.* projects
       and folders, visible text, `com.aimsby.app`, `aimsby-*` images (release also pushes the old
       `personaos-*` names), PERSONAOS_* env, JWT, connection string, model, localStorage and link
       fallbacks; builds and tests green (backend 1377, web 182, phone 319, updater 11). Left, owner:
-      India TM check and Play search, domain/handles, wordmark sign-off, Firebase Android app for
-      `com.aimsby.app` (new google-services.json), GitHub repo rename, commit/merge/release, then an
-      upgrade test on prod. Never change the Data Protection purposes, `SetApplicationName`,
+      India TM check and Play search, domain/handles, wordmark sign-off, release (server + phone),
+      upload the new google-services.json (`com.aimsby.app`, ready) in web Settings, reinstall the
+      phone, then an upgrade test on prod. Never change the Data Protection purposes, `SetApplicationName`,
       compose project/volumes, personaos.db.
 - [ ] Live Anthropic smoke test (chat with tool calls): blocked on a real API key. Owner
       2026-11-08: keep it on the list for the public release.
