@@ -32,7 +32,8 @@ Waiting for the owner to say so:
 - [ ] Brand spelling: owner chose "personaOS" (lowercase p) for the wordmark on 2026-11-05. Only
       `mark.svg`'s label uses it so far; the app's visible name, store name and the CLAUDE.md
       fixed-brand rule still say "PersonaOS". Rename as its own change when the owner says so.
-      Owner 2026-11-08: wait, and apply together with the final product name.
+      Owner 2026-11-08: wait, and apply together with the final product name. 2026-11-16: the
+      name is Aimsby; the wordmark is part of the rename (docs/rename-aimsby.md).
 
 Voice:
 - [x] V1. Hands-free like ChatGPT's voice mode (mobile, 2026-11-03). Owner: "not detecting
@@ -94,9 +95,11 @@ Release and infrastructure:
 - [x] Upgrade test from one release to the next (keyring survival) and the `minSupportedClient`
       gate: owner counted prod's own updates (alpha.20 to alpha.29, data, keys and sign-in kept) as
       the test (2026-11-08).
-- [ ] Rename: "PersonaOS" is taken; candidate names checked 2026-10-03, nothing decided. Owner
-      2026-11-08: decide later, near the public release; "Goalkeeper" ruled out (same-category apps,
-      domains and GitHub taken). The "personaOS" wordmark spelling waits for the final name.
+- [ ] Rename to **Aimsby** (owner chose it 2026-11-16; "PersonaOS" is taken). Plan:
+      [docs/rename-aimsby.md](docs/rename-aimsby.md). Phase 0 is the owner's: check Google Play
+      and the India trademark register, register domain/handles, rename the GitHub repo, approve
+      the wordmark, decide the Android applicationId. Then compat code, moves, visible text, release.
+      Never change the Data Protection purposes, `SetApplicationName`, compose project/volumes.
 - [ ] Live Anthropic smoke test (chat with tool calls): blocked on a real API key. Owner
       2026-11-08: keep it on the list for the public release.
 

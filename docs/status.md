@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-12 - B4 phone scope-change fix released as mobile alpha.31_
+_Last updated: 2026-11-16 - new product name chosen (Aimsby); rename plan written_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,6 +8,9 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
+- Rename to Aimsby: owner does Phase 0 of [rename-aimsby.md](rename-aimsby.md) (Google Play and
+  India TM check, domain/handles, GitHub repo rename, wordmark, Android applicationId). Then start
+  Phase 3 compat code (env-var and JWT fallbacks, both GHCR names, updater) on `rename/aimsby`.
 - A11. App bug first: the false-claim check does not cover a tool that returned an error
   ("GOAL-10 was created" after a refusal). See `Ai/ActionClaimDetector.cs` and `ClaimCheckGuard`
   in `Ai/Guards/ReplyGuards.cs`; add a failing test, fix, then `model-check.ps1 -Runs 5`. Then the training examples in TODO.md A11.
@@ -23,6 +26,8 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - iOS through the web app first.
 
 ## Done (recent)
+- 2026-11-16: name search done; owner chose **Aimsby** (clear on USPTO, TMview, App Store,
+  GitHub/npm/PyPI/Docker Hub, domains). Rename plan in `docs/rename-aimsby.md`; not started.
 - 2026-11-12: B4 fixed. The phone dropped the server's error `code`, so adding or moving a task
   into the running sprint failed instead of asking "Scope change". Checked live on web and the
   emulator against a throwaway QA instance; released as `mobile-v0.1.0-alpha.31` (alpha.30 failed in CI: stable Flutter 3.50 needs Gradle 9.3.1, so the workflow now pins Flutter 3.47.3).
@@ -42,9 +47,7 @@ Snapshot for starting a session. The full task board, claims and history stay in
   context minimum. 4B + voice peaks at 6.1 GB, which explains prod. Report in `output/a14/`.
 - 2026-11-08: A8 done (trained Qwen3 4B, 465/465 on every suite, public on Hugging Face);
   A10 done; server and mobile alpha.29 released; phone checks passed on the owner's phone.
-- 2026-11-07: guards for planner "no title", nudge-as-reminder, creative asks; planner answers
-  in code.
-- 2026-11-04/05: logo released (alpha.25 / mobile alpha.27); D1 phone bottom bar.
+- 2026-11-04/07: logo released (alpha.25 / mobile alpha.27), D1 bottom bar; planner/reminder guards.
 
 ## Known issues / blockers
 - Public release: blocked by the owner until features mature and hallucination is under control.
@@ -52,7 +55,7 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - On prod (6 GB card beside Whisper and Kokoro) the 4B left chat loading for minutes. A14: it
   needs 6.1 GB there, more than the card has; runaway replies added to it (capped by A15, not
   released yet). Prod stays on the 3B.
-- Rename and the "personaOS" wordmark spelling wait for a final product name.
+- Rename to Aimsby waits on the owner's Phase 0 (Google Play and India TM unchecked from here).
 - Live Anthropic smoke test needs a real API key (kept for the public release).
 - Docker Desktop must be running for the speech profile on the dev PC.
 - `output/` is gitignored: the A14 benchmark script (`output/a14/bench.mjs`) and the A16
