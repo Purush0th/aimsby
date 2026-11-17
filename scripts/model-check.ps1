@@ -42,9 +42,8 @@ param(
     [string]$Server = 'http://localhost:5080',
     # The admin login of the instance under test. Taken from the environment so no one's
     # credentials live in the script: set AIMSBY_USER and AIMSBY_PASSWORD, or pass them.
-    # Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
-    [string]$User = $(if ($env:AIMSBY_USER) { $env:AIMSBY_USER } else { $env:PERSONAOS_USER }),
-    [string]$Password = $(if ($env:AIMSBY_PASSWORD) { $env:AIMSBY_PASSWORD } else { $env:PERSONAOS_PASSWORD }),
+    [string]$User = $env:AIMSBY_USER,
+    [string]$Password = $env:AIMSBY_PASSWORD,
     [int]$TimeoutSec = 180
 )
 

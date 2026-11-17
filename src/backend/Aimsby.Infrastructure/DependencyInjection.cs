@@ -23,14 +23,11 @@ public static class DependencyInjection
     /// Binds every Application port to its Infrastructure adapter: EF Core (SQLite)
     /// persistence, Data Protection secrets, JWT creation, password hashing, and the AI
     /// provider adapters. The database file path is read from "Database:Path"
-    /// (default "data/personaos.db"); an explicit "ConnectionStrings:Aimsby" (or the older
-    /// "ConnectionStrings:PersonaOS") overrides it.
+    /// (default "data/personaos.db"); an explicit "ConnectionStrings:Aimsby" overrides it.
     /// </summary>
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString = configuration.GetConnectionString("Aimsby");
-        if (string.IsNullOrWhiteSpace(connectionString))
-            connectionString = configuration.GetConnectionString("PersonaOS"); // Name before the rename.
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             var dbPath = configuration["Database:Path"];

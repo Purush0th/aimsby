@@ -127,8 +127,6 @@ public class BackupService(IConfiguration configuration, ILogger<BackupService> 
         if (!string.IsNullOrWhiteSpace(path)) return path;
 
         var connectionString = configuration.GetConnectionString("Aimsby");
-        if (string.IsNullOrWhiteSpace(connectionString))
-            connectionString = configuration.GetConnectionString("PersonaOS"); // Name before the rename.
         if (!string.IsNullOrWhiteSpace(connectionString))
         {
             var dataSource = new SqliteConnectionStringBuilder(connectionString).DataSource;

@@ -11,14 +11,13 @@
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 #
 # Legacy ids, kept on purpose from before the rename to Aimsby: the project name (it prefixes the
-# data volumes, personaos_api-data and the rest), the database file name (personaos.db) and the
-# older PERSONAOS_* settings in .env, which still work when the AIMSBY_* one is not set.
+# data volumes, personaos_api-data and the rest) and the database file name (personaos.db).
 
 name: personaos
 
 services:
   api:
-    image: ghcr.io/purush0th/aimsby-api:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
+    image: ghcr.io/purush0th/aimsby-api:${AIMSBY_VERSION:-latest}
     environment:
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env}
       # The whole instance persists under /app/data (one volume):
@@ -51,14 +50,14 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/purush0th/aimsby-web:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
+    image: ghcr.io/purush0th/aimsby-web:${AIMSBY_VERSION:-latest}
     depends_on:
       - api
     # The only port published to the host. Bound to loopback by default so the
     # instance is reachable over Tailscale or a reverse proxy, not the open
     # internet. Set AIMSBY_BIND=0.0.0.0 only if you know what you're doing.
     ports:
-      - "${AIMSBY_BIND:-${PERSONAOS_BIND:-127.0.0.1}}:${AIMSBY_PORT:-${PERSONAOS_PORT:-8080}}:8080"
+      - "${AIMSBY_BIND:-127.0.0.1}:${AIMSBY_PORT:-8080}:8080"
     restart: unless-stopped
 
   # --- Optional: your own speech service (profile "speech", off by default) ----------------
@@ -72,7 +71,7 @@ services:
   #   (Docker Desktop on Windows has GPU support built in). See README "Voice".
   whisper:
     profiles: ["speech"]
-    image: ghcr.io/purush0th/aimsby-whisper:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
+    image: ghcr.io/purush0th/aimsby-whisper:${AIMSBY_VERSION:-latest}
     environment:
       WHISPER_MODEL: ${WHISPER_MODEL:-large-v3-turbo}
     volumes:
@@ -137,14 +136,14 @@ services:
   #            (it is mounted at the same path inside, so compose finds the same files).
   updater:
     profiles: ["updater"]
-    image: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
+    image: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-latest}
     environment:
-      PROJECT_DIR: ${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}
-      SELF_IMAGE: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-${PERSONAOS_VERSION:-latest}}
+      PROJECT_DIR: ${AIMSBY_DIR:-/opt/aimsby}
+      SELF_IMAGE: ghcr.io/purush0th/aimsby-updater:${AIMSBY_VERSION:-latest}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - updates:/updates
-      - ${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}:${AIMSBY_DIR:-${PERSONAOS_DIR:-/opt/aimsby}}
+      - ${AIMSBY_DIR:-/opt/aimsby}:${AIMSBY_DIR:-/opt/aimsby}
     restart: unless-stopped
 
 volumes:

@@ -30,7 +30,7 @@ if fail and fail in joined and os.environ.get("FAIL_VERSION", "") in open(os.env
 if args[:3] == ["compose", "config", "--services"]:
     print("api\nweb\nwhisper\nupdater")
 elif args[:1] == ["inspect"]:
-    print("ghcr.io/purush0th/personaos-updater:0.1.0-alpha.9")
+    print("ghcr.io/purush0th/aimsby-updater:0.1.0-alpha.9")
 '''
 
 
@@ -54,7 +54,7 @@ class UpdaterTest(unittest.TestCase):
         self.updates = self.root / "updates"
         self.project.mkdir()
         self.updates.mkdir()
-        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nPERSONAOS_VERSION=0.1.0-alpha.9\n")
+        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nAIMSBY_VERSION=0.1.0-alpha.9\n")
         (self.root / "docker.py").write_text(FAKE_DOCKER)
         self.calls = self.root / "calls.jsonl"
         self.served = self.root / "served"
@@ -91,28 +91,8 @@ class UpdaterTest(unittest.TestCase):
     def calls_made(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
 
-    def version_in_env(self, key="PERSONAOS_VERSION"):
+    def version_in_env(self, key="AIMSBY_VERSION"):
         return [line for line in (self.project / ".env").read_text().splitlines() if line.startswith(f"{key}=")]
-
-    def test_a_new_install_has_its_aimsby_version_rewritten(self):
-        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nAIMSBY_VERSION=0.1.0-alpha.9\n")
-        self.request("0.1.0-alpha.10")
-        self.served.write_text("0.1.0-alpha.10")
-
-        status = self.run_once()
-
-        self.assertEqual("done", status["state"])
-        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env("AIMSBY_VERSION"))
-        self.assertEqual([], self.version_in_env())
-
-    def test_a_rollback_puts_the_aimsby_version_back(self):
-        (self.project / ".env").write_text("JWT_SIGNING_KEY=x\nAIMSBY_VERSION=0.1.0-alpha.9\n")
-        self.request("0.1.0-alpha.10")
-
-        status = self.run_once()
-
-        self.assertEqual("rolled-back", status["state"])
-        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.9"], self.version_in_env("AIMSBY_VERSION"))
 
     def test_an_env_without_a_version_gets_aimsby_version(self):
         (self.project / ".env").write_text("JWT_SIGNING_KEY=x\n")
@@ -122,7 +102,7 @@ class UpdaterTest(unittest.TestCase):
         status = self.run_once()
 
         self.assertEqual("done", status["state"])
-        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env("AIMSBY_VERSION"))
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env())
 
     def test_installs_the_requested_release(self):
         self.request("0.1.0-alpha.10")
@@ -132,7 +112,7 @@ class UpdaterTest(unittest.TestCase):
 
         self.assertEqual("done", status["state"])
         self.assertEqual("r1", status["requestId"])
-        self.assertEqual(["PERSONAOS_VERSION=0.1.0-alpha.10"], self.version_in_env())
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env())
         calls = self.calls_made()
         backup = next(c for c in calls if c[:2] == ["run", "--rm"])
         self.assertIn("personaos_api-data:/data:ro", backup)
@@ -150,7 +130,7 @@ class UpdaterTest(unittest.TestCase):
 
         self.assertEqual("rolled-back", status["state"])
         self.assertIn("Back on 0.1.0-alpha.9", status["message"])
-        self.assertEqual(["PERSONAOS_VERSION=0.1.0-alpha.9"], self.version_in_env())
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.9"], self.version_in_env())
 
     def test_a_failed_download_changes_nothing(self):
         self.request("0.1.0-alpha.10")
@@ -158,7 +138,7 @@ class UpdaterTest(unittest.TestCase):
         status = self.run_once(FAIL="compose pull", FAIL_VERSION="alpha.10")
 
         self.assertEqual("failed", status["state"])
-        self.assertEqual(["PERSONAOS_VERSION=0.1.0-alpha.9"], self.version_in_env())
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.9"], self.version_in_env())
         self.assertFalse(any(c[:2] == ["compose", "up"] for c in self.calls_made()))
 
     def test_without_a_backup_nothing_is_changed(self):
@@ -168,7 +148,7 @@ class UpdaterTest(unittest.TestCase):
 
         self.assertEqual("failed", status["state"])
         self.assertIn("back up", status["message"])
-        self.assertEqual(["PERSONAOS_VERSION=0.1.0-alpha.9"], self.version_in_env())
+        self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.9"], self.version_in_env())
 
     def test_refuses_anything_but_a_version(self):
         self.request("latest; rm -rf /")

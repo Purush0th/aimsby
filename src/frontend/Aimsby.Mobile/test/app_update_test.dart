@@ -56,14 +56,6 @@ void main() {
     );
   });
 
-  test('a server from before the rename still accepts the renamed repository', () {
-    expect(AppUpdater.isReleaseApk(_url, 'Purush0th/personaOS'), isTrue);
-    expect(
-      AppUpdater.isReleaseApk('https://github.com/someone/aimsby/releases/download/v1/a.apk', 'Purush0th/personaOS'),
-      isFalse,
-    );
-  });
-
   test('the release is downloaded into the update folder and handed to the installer', () async {
     final installer = _Installer()..attach(channel);
     final progress = <double?>[];

@@ -44,7 +44,6 @@ if (!string.IsNullOrWhiteSpace(dpKeysPath))
 }
 
 // JWT bearer validation (web-host concern).
-const string LegacyJwtName = "PersonaOS";
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>() ?? new JwtOptions();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -52,11 +51,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
-            // "PersonaOS" was the issuer and audience before the rename to Aimsby: tokens issued
-            // before an upgrade stay valid until they expire, so nobody is signed out by it.
-            ValidIssuers = [jwt.Issuer, LegacyJwtName],
+            ValidIssuer = jwt.Issuer,
             ValidateAudience = true,
-            ValidAudiences = [jwt.Audience, LegacyJwtName],
+            ValidAudience = jwt.Audience,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = string.IsNullOrWhiteSpace(jwt.SigningKey)

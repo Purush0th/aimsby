@@ -86,9 +86,6 @@ function Clear-Gpu {
 
 # ---- Preflight ----------------------------------------------------------------------------------
 Step "Run $Run in $dir"
-# Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
-if (-not $env:AIMSBY_USER) { $env:AIMSBY_USER = $env:PERSONAOS_USER }
-if (-not $env:AIMSBY_PASSWORD) { $env:AIMSBY_PASSWORD = $env:PERSONAOS_PASSWORD }
 if (-not $env:AIMSBY_USER -or -not $env:AIMSBY_PASSWORD) { throw 'Set AIMSBY_USER and AIMSBY_PASSWORD (the dev instance admin).' }
 docker info --format '{{.ServerVersion}}' | Out-Null; Native 'docker info (is Docker Desktop running?)'
 # Ollama does not always come back after a reboot (2026-11-05: every collected turn failed).

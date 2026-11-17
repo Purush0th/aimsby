@@ -29,26 +29,6 @@ public static class FirebaseConfigParser
     public const string AndroidPackageName = "com.aimsby.app";
 
     /// <summary>
-    /// Legacy id, kept on purpose: the package the app shipped under before the rename to Aimsby.
-    /// A google-services.json registered only for it is still accepted, so an upgrade does not
-    /// turn push off before the owner registers the new package.
-    /// </summary>
-    public const string LegacyAndroidPackageName = "com.personaos.personaos_mobile";
-
-    private static HashSet<string> PackageNames(JsonElement clients)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var client in clients.EnumerateArray())
-        {
-            if (client.TryGetProperty("client_info", out var info)
-                && info.TryGetProperty("android_client_info", out var android)
-                && String(android, "package_name") is { } name)
-                names.Add(name);
-        }
-        return names;
-    }
-
-    /// <summary>
     /// Validates a service-account key and returns its project id. The key itself is returned
     /// untouched by the caller — it is encrypted whole, never picked apart and stored in pieces.
     /// </summary>
@@ -100,14 +80,12 @@ public static class FirebaseConfigParser
         if (!root.TryGetProperty("client", out var clients) || clients.ValueKind != JsonValueKind.Array)
             throw new PushConfigValidationException("google-services.json lists no apps.");
 
-        // One Firebase project can hold several apps; take only the one for this package, or failing
-        // that the one registered under the package name used before the rename.
-        var packageName = PackageNames(clients).Contains(AndroidPackageName) ? AndroidPackageName : LegacyAndroidPackageName;
+        // One Firebase project can hold several apps; take only the one for this package.
         foreach (var client in clients.EnumerateArray())
         {
             if (!client.TryGetProperty("client_info", out var clientInfo)) continue;
             if (!clientInfo.TryGetProperty("android_client_info", out var android)) continue;
-            if (String(android, "package_name") != packageName) continue;
+            if (String(android, "package_name") != AndroidPackageName) continue;
 
             var appId = String(clientInfo, "mobilesdk_app_id");
             var apiKey = client.TryGetProperty("api_key", out var keys)

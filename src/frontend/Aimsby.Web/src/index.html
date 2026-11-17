@@ -27,8 +27,7 @@
        white flash while the app loads. ThemeService owns the choice after that. -->
   <script>
     try {
-      // "personaos.theme" is the key before the rename; main.ts moves it once the app starts.
-      var t = localStorage.getItem('aimsby.theme') || localStorage.getItem('personaos.theme');
+      var t = localStorage.getItem('aimsby.theme');
       if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
     } catch (e) {}
   </script>

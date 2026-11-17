@@ -44,14 +44,6 @@ public class FirebaseConfigParserTests
     }
 
     [Fact]
-    public void Accepts_a_google_services_file_registered_under_the_package_used_before_the_rename()
-    {
-        var json = PushFixtures.GoogleServices(packageName: FirebaseConfigParser.LegacyAndroidPackageName);
-
-        Assert.Equal("1:123456789012:android:abc", FirebaseConfigParser.ReadClientOptions(json).AppId);
-    }
-
-    [Fact]
     public void Names_the_mistake_when_the_files_are_swapped()
     {
         // The likeliest upload error: both files are JSON from the same console. A generic

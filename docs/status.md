@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-16 - rename to Aimsby committed on dev (`0b15c2c`), repo is `Purush0th/aimsby`_
+_Last updated: 2026-11-17 - old-name fallbacks removed (uncommitted); prod to be redeployed fresh_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,14 +8,18 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Rename to Aimsby: on dev (`0b15c2c`, pushed), repo renamed to `Purush0th/aimsby`, not released.
-  Owner: India TM check, domain/handles, wordmark sign-off, then release (server first; the phone
-  is a new package, so a reinstall), upload the new google-services.json in web Settings, and
-  check the upgrade on prod.
+- Old-name fallbacks are removed in the working tree (not committed or released). The next server
+  release pushes only `aimsby-*` images, reads only `AIMSBY_*` env and `ConnectionStrings:Aimsby`,
+  and signs out any `PersonaOS`-issued token. Owner then redeploys prod fresh: the current
+  `deploy/docker-compose.yml` and a `.env` using `AIMSBY_*` keys. Data-bound ids stay (`personaos.db`,
+  compose project `personaos` and its volumes, Data Protection names, `personaos:` links, model prefix).
+- Rename follow-up (owner): upload
+  the new google-services.json (`com.aimsby.app`) in web Settings; install the Aimsby phone app
+  (new package, so a reinstall, then remove the old PersonaOS app). Still open: India TM check,
+  domain/handles, wordmark sign-off.
 - A11. App bug first: the false-claim check does not cover a tool that returned an error
   ("GOAL-10 was created" after a refusal). See `Ai/ActionClaimDetector.cs` and `ClaimCheckGuard`
   in `Ai/Guards/ReplyGuards.cs`; add a failing test, fix, then `model-check.ps1 -Runs 5`. Then the training examples in TODO.md A11.
-- Ship A15 to prod with the next server release (`v*` tag, owner's call).
 - Local servers on the OpenAI-compatible adapter (`/v1`) still get a 16,000-token reply cap; a cut
   reply shows no "stopped at the limit" note in any adapter. Neither is filed in TODO.md yet.
 - A12. Web search via a self-hosted SearXNG in the compose stack.
@@ -27,8 +31,12 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - iOS through the web app first.
 
 ## Done (recent)
-- 2026-11-16: rename to Aimsby done in code (Phases 1-3 of `docs/rename-aimsby.md`), on
-  `rename/aimsby`, not committed. Old names keep working (env, JWT, images, links, model, storage).
+- 2026-11-17: Aimsby released as `v0.1.0-alpha.30` (server; also ships A15) and
+  `mobile-v0.1.0-alpha.32` (phone, `com.aimsby.app`); both built green. This release still
+  pushed `personaos-*` images too; later ones will not. All images pull anonymously (public). Old `PersonaOS.*` build folders deleted; dev data,
+  `local.properties` and `node_modules` moved into the new folders; rename worktree removed.
+- 2026-11-16: rename to Aimsby committed (`0b15c2c`) and pushed; repo renamed to
+  `Purush0th/aimsby`. (The old-name fallbacks it added were dropped on 2026-11-17.)
 - 2026-11-16: name search done; owner chose **Aimsby** (clear on USPTO, TMview, App Store,
   GitHub/npm/PyPI/Docker Hub, domains). Rename plan in `docs/rename-aimsby.md`; not started.
 - 2026-11-12: B4 fixed. The phone dropped the server's error `code`, so adding or moving a task
@@ -56,8 +64,8 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Public release: blocked by the owner until features mature and hallucination is under control.
   Do not suggest cutting it.
 - On prod (6 GB card beside Whisper and Kokoro) the 4B left chat loading for minutes. A14: it
-  needs 6.1 GB there, more than the card has; runaway replies added to it (capped by A15, not
-  released yet). Prod stays on the 3B.
+  needs 6.1 GB there, more than the card has; runaway replies added to it (capped by A15, released
+  in alpha.30). Prod stays on the 3B.
 - Rename to Aimsby: India TM and the Play Store search are still the owner's to check.
 - Live Anthropic smoke test needs a real API key (kept for the public release).
 - Docker Desktop must be running for the speech profile on the dev PC.

@@ -3,7 +3,7 @@ asks for, and nothing else.
 
 The API writes <updates>/request.json ({"id", "version"}); this loop picks it up, then:
   1. backs up the data volume to ./backups next to the compose file,
-  2. sets AIMSBY_VERSION in .env (and PERSONAOS_VERSION, the older name, if .env has it),
+  2. sets AIMSBY_VERSION in .env,
   3. pulls the images and restarts every service but itself,
   4. waits for the API to answer with the new version,
   5. on any failure puts the old version back and restarts again.
@@ -102,28 +102,21 @@ def run(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return result
 
 
-# AIMSBY_VERSION is the current key. PERSONAOS_VERSION is the name before the rename to Aimsby:
-# installs set up earlier still have it, so it is read as a fallback and kept up to date.
-VERSION_KEYS = ("AIMSBY_VERSION", "PERSONAOS_VERSION")
+VERSION_KEY = "AIMSBY_VERSION"
 
 
 def current_version() -> str:
-    text = ENV_FILE.read_text(encoding="utf-8")
-    for key in VERSION_KEYS:
-        found = re.findall(rf"^{key}=(.*)$", text, re.MULTILINE)
-        if found:
-            return found[-1].strip()
-    return "latest"
+    found = re.findall(rf"^{VERSION_KEY}=(.*)$", ENV_FILE.read_text(encoding="utf-8"), re.MULTILINE)
+    return found[-1].strip() if found else "latest"
 
 
 def set_version(version: str) -> None:
-    """Rewrites whichever version keys .env has; a .env with neither gets AIMSBY_VERSION."""
+    """Rewrites AIMSBY_VERSION in .env, or adds it when .env has none."""
     text = ENV_FILE.read_text(encoding="utf-8")
-    present = [key for key in VERSION_KEYS if re.search(rf"^{key}=", text, re.MULTILINE)]
-    for key in present:
-        text = re.sub(rf"^{key}=.*$", f"{key}={version}", text, flags=re.MULTILINE)
-    if not present:
-        text = text.rstrip("\n") + f"\nAIMSBY_VERSION={version}\n"
+    if re.search(rf"^{VERSION_KEY}=", text, re.MULTILINE):
+        text = re.sub(rf"^{VERSION_KEY}=.*$", f"{VERSION_KEY}={version}", text, flags=re.MULTILINE)
+    else:
+        text = text.rstrip("\n") + f"\n{VERSION_KEY}={version}\n"
     ENV_FILE.write_text(text, encoding="utf-8")
 
 
@@ -229,7 +222,7 @@ def main() -> None:
     log(f"Aimsby updater watching {UPDATES} for {PROJECT_DIR}")
     handled = (read_json(STATUS) or {}).get("requestId")
     while not ENV_FILE.exists():
-        # AIMSBY_DIR (or the older PERSONAOS_DIR) does not point at the compose folder: say so, and do nothing.
+        # AIMSBY_DIR does not point at the compose folder: say so, and do nothing.
         Job(None, None).status("not-set-up", f"No .env in {PROJECT_DIR}: set AIMSBY_DIR in .env to the folder with docker-compose.yml.")
         if os.environ.get("ONCE") == "1":
             return

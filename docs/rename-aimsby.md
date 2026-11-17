@@ -100,6 +100,10 @@ purpose:
   once.
 
 ## Phase 3: names with live users (old names must keep working)
+> Superseded 2026-11-17: there are no installs besides the owner's prod, which is redeployed fresh,
+> so the env, JWT, connection-string, image, phone-package, repo-name and web-storage fallbacks
+> below were removed. The data-bound ids kept below still stand (see docs/decisions.md).
+
 | Item | Plan |
 |---|---|
 | Env vars `PERSONAOS_VERSION/USER/PASSWORD/DIR/BIND/PORT` | Read `AIMSBY_*` first and fall back to `PERSONAOS_*`; the updater regex (`updater.py` ~104-113) rewrites whichever key the `.env` has |

@@ -150,9 +150,8 @@ def main() -> None:
     parser.add_argument("--only", nargs="*", help="capabilities to run (default: all)")
     args = parser.parse_args()
 
-    # Legacy names, kept on purpose: PERSONAOS_USER and PERSONAOS_PASSWORD from before the rename still work.
-    user = os.environ.get("AIMSBY_USER") or os.environ["PERSONAOS_USER"]
-    password = os.environ.get("AIMSBY_PASSWORD") or os.environ["PERSONAOS_PASSWORD"]
+    user = os.environ["AIMSBY_USER"]
+    password = os.environ["AIMSBY_PASSWORD"]
     token = call(args.server, "POST", "/api/auth/login", body={
         "username": user, "password": password})["accessToken"]
     original = call(args.server, "GET", "/api/setup", token)["aiBaseUrl"]

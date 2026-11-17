@@ -64,16 +64,7 @@ class AppUpdater {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.scheme != 'https' || uri.host != 'github.com') return false;
     final path = uri.path.toLowerCase();
-    return path.endsWith('.apk') && _sameRepository(repository).any((r) => path.startsWith('/$r/releases/download/'));
-  }
-
-  /// [repository] and, for a server from before the rename to Aimsby that still names
-  /// "owner/personaOS", the renamed "owner/aimsby" GitHub now answers with.
-  static Iterable<String> _sameRepository(String repository) {
-    final name = repository.toLowerCase();
-    // Legacy id, kept on purpose: the repository's name before the rename.
-    const legacy = '/personaos';
-    return name.endsWith(legacy) ? [name, '${name.substring(0, name.length - legacy.length)}/aimsby'] : [name];
+    return path.endsWith('.apk') && path.startsWith('/${repository.toLowerCase()}/releases/download/');
   }
 }
 
