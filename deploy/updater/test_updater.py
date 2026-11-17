@@ -50,7 +50,7 @@ class Api(BaseHTTPRequestHandler):
 class UpdaterTest(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
-        self.project = self.root / "personaos"
+        self.project = self.root / "aimsby"
         self.updates = self.root / "updates"
         self.project.mkdir()
         self.updates.mkdir()
@@ -115,7 +115,7 @@ class UpdaterTest(unittest.TestCase):
         self.assertEqual(["AIMSBY_VERSION=0.1.0-alpha.10"], self.version_in_env())
         calls = self.calls_made()
         backup = next(c for c in calls if c[:2] == ["run", "--rm"])
-        self.assertIn("personaos_api-data:/data:ro", backup)
+        self.assertIn("aimsby_api-data:/data:ro", backup)
         pull = next(c for c in calls if c[:2] == ["compose", "pull"])
         up = next(c for c in calls if c[:2] == ["compose", "up"])
         # Every service but the updater itself, which a helper replaces afterwards.

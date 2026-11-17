@@ -249,8 +249,7 @@ public partial class ChatService
         return Planner.PlannerQuestion.NotFoundAnswer(topic, day, today);
     }
 
-    // PersonaOS: the name from before the rename to Aimsby, which people may still use.
-    [GeneratedRegex(@"\b(?:tasks?|TASK-\d+|sprints?|goals?|GOAL-\d+|board|backlog|reminders?|notes?|memor(?:y|ies)|Aimsby|PersonaOS|app|version|update)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(?:tasks?|TASK-\d+|sprints?|goals?|GOAL-\d+|board|backlog|reminders?|notes?|memor(?:y|ies)|Aimsby|app|version|update)\b", RegexOptions.IgnoreCase)]
     private static partial Regex OtherPartOfTheApp();
 
     /// <summary>Whether a pending reminder, a note or a memory mentions the topic, so the question may be about it.</summary>
@@ -289,8 +288,7 @@ public partial class ChatService
     /// <summary>"Where can I download Aimsby?", "how do I install the app", "is there an APK?".</summary>
     public static bool AsksWhereToGetAimsby(string message) => WhereToGet().IsMatch(message);
 
-    // PersonaOS: the name from before the rename to Aimsby, which people may still use.
-    [GeneratedRegex(@"\b(?:download|install|apk|get hold of|where (?:can|do) i (?:get|find))\b.*\b(?:aimsby|personaos|the app|this app|android app)\b|\b(?:aimsby|personaos)\b.*\b(?:download|install|apk)\b|\bis there an apk\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(?:download|install|apk|get hold of|where (?:can|do) i (?:get|find))\b.*\b(?:aimsby|the app|this app|android app)\b|\baimsby\b.*\b(?:download|install|apk)\b|\bis there an apk\b", RegexOptions.IgnoreCase)]
     private static partial Regex WhereToGet();
 
     /// <summary>Words of a question that say where or when to look, not what to look for.</summary>

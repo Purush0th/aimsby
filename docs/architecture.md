@@ -71,7 +71,7 @@ CI in `.github/workflows/ci.yml`. Prod updates through the app's updater.
 - EF tools are pinned locally (`dotnet dotnet-ef`), not installed globally.
 
 ## Local dev
-- Dev DB: embedded SQLite at `src/backend/Aimsby.Api/data/personaos.db` (WAL, gitignored),
+- Dev DB: embedded SQLite at `src/backend/Aimsby.Api/data/aimsby.db` (WAL, gitignored),
   created and migrated on first run; path is `Database:Path`. No LocalDB or SQL Server.
 - Free local chat: the **Ollama** provider at `http://localhost:11434` (keyless; the dev DB uses
   `qwen2.5:3b-instruct`), via the Setup Wizard or `POST /api/setup`. Host Ollama runs flash

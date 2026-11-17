@@ -64,7 +64,7 @@ to prompts, guards, tools or sampling also runs `scripts/model-check.ps1` before
 - **Gate new modules** with `[RequireFeature(InstanceConfig.Modules.X)]` and make the tool
   respect the same toggle.
 - **Never log or commit secrets.** The Anthropic key is encrypted at rest; keep it that way.
-  Don't change the Data Protection purpose string (`PersonaOS.AnthropicApiKey.v1`) — existing
+  Don't change the Data Protection purpose string (`Aimsby.AnthropicApiKey.v1`) — existing
   installs' ciphertext is bound to it.
 
 ## Schema changes

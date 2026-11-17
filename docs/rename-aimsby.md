@@ -32,6 +32,9 @@ path hits are the project folders: `src/backend/PersonaOS.{Api,Application,Domai
 `src/frontend/PersonaOS.{Web,Mobile}` and `PersonaOS.slnx`.
 
 ## Never change (data would be lost)
+> Superseded 2026-11-17: the owner renamed these too (re-entering the stored keys, restoring the
+> data into the new `aimsby_*` volumes). See docs/decisions.md.
+
 Leave these exactly as they are. Add a comment beside each one saying it is a legacy id, kept on
 purpose:
 - Data Protection purpose strings `PersonaOS.AnthropicApiKey.v1`, `PersonaOS.FcmServiceAccount.v1` and

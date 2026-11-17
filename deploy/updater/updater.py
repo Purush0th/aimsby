@@ -28,9 +28,9 @@ from pathlib import Path
 
 UPDATES = Path(os.environ.get("UPDATES", "/updates"))
 PROJECT_DIR = Path(os.environ["PROJECT_DIR"])
-# Legacy id, kept on purpose: the compose project name prefixes the data volumes (personaos_api-data),
-# so renaming it would orphan every install's data.
-PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", "personaos")
+# The compose project name prefixes the data volumes (aimsby_api-data), so renaming it would orphan
+# every install's data.
+PROJECT = os.environ.get("COMPOSE_PROJECT_NAME", "aimsby")
 DOCKER = os.environ.get("DOCKER", "docker").split()
 API_URL = os.environ.get("API_URL", "http://api:8080")
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "10"))

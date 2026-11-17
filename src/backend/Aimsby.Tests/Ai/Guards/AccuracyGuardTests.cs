@@ -389,7 +389,6 @@ public class TaskCommandTests
 
     [Theory]
     [InlineData("Where can I download Aimsby?", true)]
-    [InlineData("Is there a PersonaOS apk?", true)]
     [InlineData("How do I install the app on my phone?", true)]
     [InlineData("Download the report", false)]
     public void Asking_where_to_get_Aimsby_is_recognised(string message, bool asks)

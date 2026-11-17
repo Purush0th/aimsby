@@ -2,14 +2,13 @@
 # Values come from the environment — set the LITESTREAM_* keys in your .env.
 # Docs: https://litestream.io/reference/config/
 #
-# Legacy ids, kept on purpose from before the rename to Aimsby: the database file name, and the
-# replica's folder in the bucket (a new name would start a new, empty replica).
+# The replica's folder in the bucket: a new name starts a new, empty replica.
 dbs:
-  - path: /app/data/personaos.db
+  - path: /app/data/aimsby.db
     replicas:
       - type: s3
         bucket: ${LITESTREAM_BUCKET}
-        path: personaos
+        path: aimsby
         # For S3-compatible stores (MinIO, Backblaze B2, R2). Omit for AWS S3.
         endpoint: ${LITESTREAM_ENDPOINT}
         access-key-id: ${LITESTREAM_ACCESS_KEY_ID}

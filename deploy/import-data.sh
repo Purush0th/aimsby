@@ -13,8 +13,7 @@ archive="${1:?usage: ./import-data.sh <archive.tar.gz>}"
 [ -f "$archive" ] || { echo "No such file: $archive" >&2; exit 1; }
 folder=$(cd "$(dirname "$archive")" && pwd)
 name=$(basename "$archive")
-# Legacy id, kept on purpose: the compose project keeps its name from before the rename to Aimsby.
-volume="${COMPOSE_PROJECT_NAME:-personaos}_api-data"
+volume="${COMPOSE_PROJECT_NAME:-aimsby}_api-data"
 
 echo "Stopping the API..."
 docker compose stop api

@@ -10,10 +10,10 @@
 # Published images are used by default. To build from a source checkout instead:
 #   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 #
-# Legacy ids, kept on purpose from before the rename to Aimsby: the project name (it prefixes the
-# data volumes, personaos_api-data and the rest) and the database file name (personaos.db).
+# The project name prefixes the data volumes (aimsby_api-data and the rest): changing it orphans
+# the data.
 
-name: personaos
+name: aimsby
 
 services:
   api:
@@ -21,13 +21,13 @@ services:
     environment:
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?set JWT_SIGNING_KEY in .env}
       # The whole instance persists under /app/data (one volume):
-      #   personaos.db        — the SQLite database (config, chat, goals, encrypted key)
+      #   aimsby.db           — the SQLite database (config, chat, goals, encrypted key)
       #   docs-storage/       — files attached to tasks and goals
       #   dp-keys/            — Data Protection keyring that decrypts the stored API key
       #   prompts/            — optional edits to the assistant's instructions (see README)
       # Back this volume up as a unit — the ciphertext (db) and its keyring live together.
       # See docs/BACKUP.md for the nightly backup job and off-host options.
-      Database__Path: /app/data/personaos.db
+      Database__Path: /app/data/aimsby.db
       Documents__StoragePath: /app/data/docs-storage
       DataProtection__KeysPath: /app/data/dp-keys
       Prompts__OverridePath: /app/data/prompts

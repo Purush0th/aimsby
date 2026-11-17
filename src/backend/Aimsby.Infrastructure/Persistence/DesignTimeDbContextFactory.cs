@@ -12,9 +12,8 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
 {
     public AppDbContext CreateDbContext(string[] args)
     {
-        // Legacy id, kept on purpose: the database file keeps its name from before the rename.
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite("Data Source=data/personaos.db")
+            .UseSqlite("Data Source=data/aimsby.db")
             .Options;
 
         return new AppDbContext(options);

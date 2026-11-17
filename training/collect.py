@@ -142,7 +142,7 @@ def main() -> None:
     parser.add_argument("--proxy", default="http://localhost:11500/v1")
     parser.add_argument("--proxy-log", required=True)
     # Legacy id, kept on purpose: the database file keeps its name from before the rename to Aimsby.
-    parser.add_argument("--db", default="src/backend/Aimsby.Api/data/personaos.db")
+    parser.add_argument("--db", default="src/backend/Aimsby.Api/data/aimsby.db")
     parser.add_argument("--out", required=True)
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=10_000)

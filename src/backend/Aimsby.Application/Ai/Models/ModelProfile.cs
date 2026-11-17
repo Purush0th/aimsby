@@ -130,12 +130,10 @@ public static partial class ModelProfiles
             // Instruct-2507 builds ("qwen3:4b-instruct") never reason, so they are left as they are:
             // a /no_think line would only be noise in a prompt the trained model never saw.
             // Aimsby's own models ("aimsby-qwen3:4b", the name the model download gives) are
-            // all Instruct fine-tunes, whatever their name says; so are the ones downloaded before
-            // the rename ("personaos-qwen3:4b"), which keep their old name in Ollama.
+            // all Instruct fine-tunes, whatever their name says.
             if (model.Contains("qwen3", StringComparison.OrdinalIgnoreCase)
                 && !model.Contains("instruct", StringComparison.OrdinalIgnoreCase)
-                && !model.StartsWith("aimsby-", StringComparison.OrdinalIgnoreCase)
-                && !model.StartsWith("personaos-", StringComparison.OrdinalIgnoreCase))
+                && !model.StartsWith("aimsby-", StringComparison.OrdinalIgnoreCase))
             {
                 profile = profile with { Name = profile.Name + "+thinking", Thinks = true, IdleTimeout = TimeSpan.FromSeconds(300) };
             }

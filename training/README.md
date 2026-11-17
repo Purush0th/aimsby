@@ -72,7 +72,7 @@ AIMSBY_USER=… AIMSBY_PASSWORD=… python -I training/collect.py \
     --proxy-log data/training/calls.jsonl --out data/training/traces.jsonl --only claims
 python -I training/build_dataset.py data/training/dataset data/training/traces3.jsonl data/training/traces.jsonl
 docker run --rm --gpus all -v "$PWD/training:/code" -v "$PWD/data/training:/work" \
-    -v personaos-hf-cache:/root/.cache/huggingface -w /code unsloth/unsloth:core-v0.1.908-beta \
+    -v aimsby-hf-cache:/root/.cache/huggingface -w /code unsloth/unsloth:core-v0.1.908-beta \
     python train.py --data /work/dataset --out /work/model
 ```
 

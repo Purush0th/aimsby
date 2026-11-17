@@ -152,7 +152,7 @@ if (Test-Path (Join-Path $dir 'model/config.json')) { Step 'Train: already done'
     $code = (Join-Path $root 'training') -replace '\\', '/'
     $data = $work -replace '\\', '/'
     # Legacy id, kept on purpose: the model cache volume keeps its name from before the rename to Aimsby.
-    docker run -d --name $container --gpus all -v "${code}:/code" -v "${data}:/work" -v personaos-hf-cache:/root/.cache/huggingface -w /code $Image `
+    docker run -d --name $container --gpus all -v "${code}:/code" -v "${data}:/work" -v aimsby-hf-cache:/root/.cache/huggingface -w /code $Image `
         python train.py --data "$inContainer/dataset" --out "$inContainer/model" --checkpoints "$inContainer/checkpoints" --base $Base --family $Family --epochs $Epochs --lr $Lr | Out-Null
     Native 'docker run (train)'
     $exit = docker wait $container

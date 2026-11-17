@@ -17,7 +17,7 @@ Map: [docs/architecture.md](docs/architecture.md). Coding bar: [docs/ENGINEERING
 - AI goes through `IAiMessageStreamer` with native tool-use (not MCP); a provider is one adapter.
   Tools stay thin wrappers over domain services.
 - Provider keys are encrypted at rest; never log or commit them. Never change the Data
-  Protection purpose string `PersonaOS.AnthropicApiKey.v1`.
+  Protection purpose string `Aimsby.AnthropicApiKey.v1`.
 - Gate module endpoints with `[RequireFeature(InstanceConfig.Modules.X)]`.
 - Tests target the Application layer; extend `TestSupport/Fakes.cs`, no mocking library.
 
@@ -32,7 +32,7 @@ Map: [docs/architecture.md](docs/architecture.md). Coding bar: [docs/ENGINEERING
   tests `npx ng test --watch=false --browsers=ChromeHeadless`.
 - Phone (`src/frontend/Aimsby.Mobile`): `flutter analyze && flutter test`; `dart format` at 120.
 - Accuracy: `scripts/model-check.ps1 -Runs 5` (needs `AIMSBY_USER` / `AIMSBY_PASSWORD`).
-- Reset dev DB: stop the API, `rm src/backend/Aimsby.Api/data/personaos.db*`.
+- Reset dev DB: stop the API, `rm src/backend/Aimsby.Api/data/aimsby.db*`.
 
 <!-- agent-router:start (managed section; re-running /agent-router replaces it) -->
 ## Orchestration & model routing

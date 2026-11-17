@@ -33,9 +33,8 @@ builder.Services.AddHostedService<Aimsby.Api.Infrastructure.UpdateCheckService>(
 // Data Protection encrypts the Anthropic API key at rest. Persist keys to a
 // configured path (the mounted data volume in Docker) so the ciphertext stays
 // decryptable across restarts/upgrades. In dev, the OS default store is used.
-// Legacy id, kept on purpose: the application name "PersonaOS" isolates the key ring, so changing
-// it would stop every stored key from decrypting.
-var dpProtection = builder.Services.AddDataProtection().SetApplicationName("PersonaOS");
+// The application name isolates the key ring: changing it stops every stored key from decrypting.
+var dpProtection = builder.Services.AddDataProtection().SetApplicationName("Aimsby");
 var dpKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(dpKeysPath))
 {

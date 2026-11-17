@@ -16,15 +16,14 @@ public interface IPushProviderConfigurator
 /// <summary>
 /// Data Protection purposes, one per kind of secret. A ciphertext produced under one purpose
 /// cannot be decrypted under another, so a stored AI key can never be passed off as a push
-/// credential or the other way round.
-/// Legacy ids, kept on purpose: the "PersonaOS." prefix predates the rename to Aimsby, and
-/// stored ciphertexts are bound to these exact strings.
+/// credential or the other way round. Stored ciphertexts are bound to these exact strings, so
+/// never change them.
 /// </summary>
 public static class SecretPurposes
 {
     /// <summary>Keyed-service name for the protector that guards the Firebase service account.</summary>
-    public const string PushCredentials = "PersonaOS.FcmServiceAccount.v1";
+    public const string PushCredentials = "Aimsby.FcmServiceAccount.v1";
 
     /// <summary>Keyed-service name for the protector that guards the speech service's key.</summary>
-    public const string SpeechApiKey = "PersonaOS.SpeechApiKey.v1";
+    public const string SpeechApiKey = "Aimsby.SpeechApiKey.v1";
 }

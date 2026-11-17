@@ -44,10 +44,10 @@ Thumbs.db
 .continueignore
 .taste-skill/
 
-# Local SQLite database (dev) + WAL sidecars, and runtime backup snapshots (personaos.db keeps its name from before the rename to Aimsby)
-**/personaos.db
-**/personaos.db-wal
-**/personaos.db-shm
+# Local SQLite database (dev) + WAL sidecars, and runtime backup snapshots
+**/aimsby.db
+**/aimsby.db-wal
+**/aimsby.db-shm
 src/backend/Aimsby.Api/data/
 
 # Firebase client config: per-install, identifies the owner's own Firebase project.

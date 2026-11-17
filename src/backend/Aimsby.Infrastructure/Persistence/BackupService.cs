@@ -80,8 +80,7 @@ public class BackupService(IConfiguration configuration, ILogger<BackupService> 
         Directory.CreateDirectory(dest);
 
         // Clean single-file snapshot of the committed state, safe during normal operation.
-        // Legacy id, kept on purpose: the snapshot is named like the live database file.
-        var snapshot = Path.Combine(dest, "personaos.db").Replace("'", "''");
+        var snapshot = Path.Combine(dest, "aimsby.db").Replace("'", "''");
         using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = dbPath }.ToString()))
         {
             conn.Open();
@@ -132,7 +131,6 @@ public class BackupService(IConfiguration configuration, ILogger<BackupService> 
             var dataSource = new SqliteConnectionStringBuilder(connectionString).DataSource;
             if (!string.IsNullOrWhiteSpace(dataSource)) return dataSource;
         }
-        // Legacy id, kept on purpose: existing installs' database file keeps its name.
-        return Path.Combine("data", "personaos.db");
+        return Path.Combine("data", "aimsby.db");
     }
 }

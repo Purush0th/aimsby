@@ -29,11 +29,7 @@ void main() {
       expect(itemKeyFromLink('https://example.com'), isNull);
       expect(itemKeyFromLink('aimsby:TASK-7; drop'), isNull);
       expect(itemKeyFromLink(null), isNull);
-    });
-
-    test('reads links written before the rename', () {
-      expect(itemKeyFromLink('personaos:TASK-7'), 'TASK-7');
-      expect(itemKeyFromLink('personaos:TASK-7; drop'), isNull);
+      expect(itemKeyFromLink('other:TASK-7'), isNull);
     });
   });
 }

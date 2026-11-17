@@ -29,14 +29,7 @@ String linkItemKeys(String markdown, {Iterable<String> unknown = const []}) {
 /// The item key a link points at, or null when it is not a link to an item.
 String? itemKeyFromLink(String? href) {
   if (href == null) return null;
-  for (final scheme in [itemLinkScheme, _legacyItemLinkScheme]) {
-    if (href.startsWith('$scheme:')) {
-      final key = href.substring(scheme.length + 1);
-      return _wholeKey.hasMatch(key) ? key : null;
-    }
-  }
-  return null;
+  if (!href.startsWith('$itemLinkScheme:')) return null;
+  final key = href.substring(itemLinkScheme.length + 1);
+  return _wholeKey.hasMatch(key) ? key : null;
 }
-
-/// Legacy id, kept on purpose: the scheme before the rename to Aimsby, still in saved chats.
-const _legacyItemLinkScheme = 'personaos';

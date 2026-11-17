@@ -12,9 +12,8 @@ public class DataProtectionSecretProtector : ISecretProtector
     /// <summary>
     /// The AI provider key's purpose. Named for Anthropic for historical reasons, but it guards
     /// whichever provider's key is stored; renaming it would make every existing key unreadable.
-    /// Legacy id, kept on purpose: the "PersonaOS." prefix predates the rename to Aimsby.
     /// </summary>
-    public const string AiProviderKeyPurpose = "PersonaOS.AnthropicApiKey.v1";
+    public const string AiProviderKeyPurpose = "Aimsby.AnthropicApiKey.v1";
 
     private readonly IDataProtector _protector;
 

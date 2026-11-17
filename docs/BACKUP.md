@@ -10,11 +10,11 @@ Everything lives in the API's data directory (the `api-data` volume, mounted at
 
 | Path | What it is | Losing it means |
 |---|---|---|
-| `personaos.db` (+ `-wal`, `-shm`) | The whole database: config, nickname, provider settings, chat, goals, board, planner, reminders, attachment metadata, and the **encrypted API key** | All data gone |
+| `aimsby.db` (+ `-wal`, `-shm`) | The whole database: config, nickname, provider settings, chat, goals, board, planner, reminders, attachment metadata, and the **encrypted API key** | All data gone |
 | `docs-storage/` | Files attached to tasks and goals | Attachments gone |
 | `dp-keys/` | Data Protection keyring — the key that **decrypts** the API key stored in the db | The stored API key becomes unreadable (re-enter it in Settings) |
 
-> **Back these up together.** The encrypted key (in `personaos.db`) is useless
+> **Back these up together.** The encrypted key (in `aimsby.db`) is useless
 > without its keyring (`dp-keys/`). A backup that captures one but not the other
 > can't restore a working instance — you'd restore the data and then re-enter the
 > provider key in Settings.
@@ -24,7 +24,7 @@ Everything lives in the API's data directory (the `api-data` volume, mounted at
 The API runs a `BackupService` that, roughly once a day, writes a self-contained
 snapshot to `Backup__Path` (default `/app/data/backups/<timestamp>/`):
 
-- `personaos.db` — a clean `VACUUM INTO` copy (safe while the app runs)
+- `aimsby.db` — a clean `VACUUM INTO` copy (safe while the app runs)
 - `dp-keys/` and `docs-storage/` — copied alongside, so each snapshot is a
   complete, restorable set
 - older snapshots beyond `Backup__KeepDays` (default 14) are pruned
@@ -44,7 +44,7 @@ Tune it with env: `Backup__Enabled`, `Backup__Path`, `Backup__KeepDays`.
 
 ## Layer 2 — off-host continuous replication (Litestream, optional)
 
-For near-zero data loss (seconds, not "since last night"), replicate `personaos.db`
+For near-zero data loss (seconds, not "since last night"), replicate `aimsby.db`
 continuously to an S3-compatible target with the Litestream overlay:
 
 ```bash
@@ -53,7 +53,7 @@ docker compose -f docker-compose.yml -f docker-compose.litestream.yml up -d
 ```
 
 Litestream streams the WAL off-host as it's written. **It covers only
-`personaos.db`** — keep the nightly snapshot (Layer 1) running for `docs-storage/`
+`aimsby.db`** — keep the nightly snapshot (Layer 1) running for `docs-storage/`
 and `dp-keys/`, or replicate those with your own tool (`restic`, `rclone`).
 
 ## Layer 3 — storage-level redundancy (recommended for the paranoid)
@@ -71,7 +71,7 @@ snapshot folder's contents, restart.
 ```bash
 docker compose stop api
 # copy the chosen snapshot back over the live data (inside the volume)
-#   personaos.db  → /app/data/personaos.db   (delete stale -wal/-shm first)
+#   aimsby.db     → /app/data/aimsby.db   (delete stale -wal/-shm first)
 #   dp-keys/      → /app/data/dp-keys/
 #   docs-storage/ → /app/data/docs-storage/
 docker compose start api
@@ -81,7 +81,7 @@ docker compose start api
 restore `dp-keys/` + `docs-storage/` from your Layer-1 snapshot, then start.
 
 ```bash
-litestream restore -config deploy/litestream.yml /app/data/personaos.db
+litestream restore -config deploy/litestream.yml /app/data/aimsby.db
 ```
 
 **Sanity checks after any restore:**

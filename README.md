@@ -237,7 +237,7 @@ still comes from the phone, your own service or OpenAI.
 
 **Turn it off again.** Remove the `COMPOSE_PROFILES` line, run `docker compose stop whisper kokoro`
 (`docker compose rm -f whisper kokoro` to delete the containers; `docker volume rm
-personaos_speech-models` to delete the 1.6 GB model) and clear the address in Settings → Speech
+aimsby_speech-models` to delete the 1.6 GB model) and clear the address in Settings → Speech
 service. The phone then uses its own speech again. If a stopped service is still set, the phone
 speaks with its own voice but speech-to-text reports that it could not hear you.
 
@@ -315,8 +315,10 @@ keyAlias=aimsby
 keyPassword=...
 ```
 
-The alias is any name you like, as long as `ANDROID_KEY_ALIAS` and `keyAlias` match it. The key
-this project already signs with was made before the rename to Aimsby and keeps the alias `personaos`.
+The alias is any name you like, as long as `ANDROID_KEY_ALIAS` and `keyAlias` match it. To rename
+the alias of an existing key (the key itself stays, so installed apps still update), run
+`keytool -changealias -alias <old> -destalias aimsby -keystore aimsby-release.jks`, then set
+`ANDROID_KEYSTORE_BASE64` and `ANDROID_KEY_ALIAS` again.
 
 An APK signed with another key (a debug build, or one from before this key) cannot be updated in
 place: uninstall it once and install a signed release.
@@ -328,7 +330,7 @@ decrypt your stored API keys, so keep the file private):
 
 ```bash
 docker compose stop
-docker run --rm -v personaos_api-data:/data:ro -v "$PWD:/out" alpine:3.20 \
+docker run --rm -v aimsby_api-data:/data:ro -v "$PWD:/out" alpine:3.20 \
   tar czf /out/aimsby-data.tar.gz -C /data --exclude=./backups .
 ```
 
@@ -342,9 +344,9 @@ Point the phone at the new address (Settings → Server) and delete the archive.
 
 ## Your data & backups
 
-Everything lives in **one** Docker volume, `personaos_api-data`:
+Everything lives in **one** Docker volume, `aimsby_api-data`:
 
-- `personaos.db` — the SQLite database (config, chat, goals, planner, reminders, and the
+- `aimsby.db` — the SQLite database (config, chat, goals, planner, reminders, and the
   **encrypted** provider API key)
 - `docs-storage/` — files attached to tasks and goals
 - `dp-keys/` — the Data Protection keyring that **decrypts** the stored key
@@ -363,7 +365,7 @@ npx ng serve                          # web app, in src/frontend/Aimsby.Web
 flutter run                           # mobile, in src/frontend/Aimsby.Mobile
 ```
 
-The dev backend uses embedded SQLite at `src/backend/Aimsby.Api/data/personaos.db` (created
+The dev backend uses embedded SQLite at `src/backend/Aimsby.Api/data/aimsby.db` (created
 on first run). See [CLAUDE.md](CLAUDE.md) for the architecture, layer rules, and working
 conventions, and [docs/PRD.md](docs/PRD.md) for what the product is and why.
 

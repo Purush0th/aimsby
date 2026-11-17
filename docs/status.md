@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-17 - old-name fallbacks removed (uncommitted); prod to be redeployed fresh_
+_Last updated: 2026-11-17 - data-bound ids renamed to Aimsby (`e4cf94d`, not pushed); keystore alias and secrets done_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,14 +8,17 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Old-name fallbacks are removed in the working tree (not committed or released). The next server
-  release pushes only `aimsby-*` images, reads only `AIMSBY_*` env and `ConnectionStrings:Aimsby`,
-  and signs out any `PersonaOS`-issued token. Owner then redeploys prod fresh: the current
-  `deploy/docker-compose.yml` and a `.env` using `AIMSBY_*` keys. Data-bound ids stay (`personaos.db`,
-  compose project `personaos` and its volumes, Data Protection names, `personaos:` links, model prefix).
+- Fallbacks dropped (`80c60e0`, pushed) and the data-bound ids renamed (`e4cf94d`, committed, not
+  pushed or released): Data Protection name/purposes `Aimsby.*`, `aimsby.db`, compose project
+  `aimsby` (`aimsby_*` volumes), Litestream path, `aimsby:` links only. Needs a server and a phone
+  release. Owner then: restores the backup into `aimsby_api-data` renaming `personaos.db*` to
+  `aimsby.db*`, re-enters the AI key, Firebase file and speech key, `ollama cp` the model to an
+  `aimsby-` name and re-picks it. Keystore alias is now `aimsby` and both signing secrets are
+  reset (2026-11-17); the first phone CI build confirms them. Dev DB renamed to `aimsby.db`
+  (its stored keys no longer decrypt; re-enter them in dev).
 - Rename follow-up (owner): upload
   the new google-services.json (`com.aimsby.app`) in web Settings; install the Aimsby phone app
-  (new package, so a reinstall, then remove the old PersonaOS app). Still open: India TM check,
+  (new package, so a reinstall, then remove the old app). Still open: India TM check,
   domain/handles, wordmark sign-off.
 - A11. App bug first: the false-claim check does not cover a tool that returned an error
   ("GOAL-10 was created" after a refusal). See `Ai/ActionClaimDetector.cs` and `ClaimCheckGuard`
