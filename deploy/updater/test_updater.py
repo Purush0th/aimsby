@@ -179,6 +179,17 @@ class UpdaterTest(unittest.TestCase):
         self.assertIn("AIMSBY_DIR", status["message"])
         self.assertEqual([], self.calls_made())
 
+    def test_once_the_compose_folder_is_found_the_not_set_up_message_goes(self):
+        env = (self.project / ".env").read_text()
+        (self.project / ".env").unlink()
+        self.run_once()
+        (self.project / ".env").write_text(env)  # The owner sets AIMSBY_DIR and restarts it.
+
+        status = self.run_once()
+
+        self.assertEqual("idle", status["state"])
+        self.assertNotIn("message", status)
+
     def test_with_nothing_asked_it_only_reports_that_it_is_alive(self):
         status = self.run_once()
 

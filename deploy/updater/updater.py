@@ -227,6 +227,10 @@ def main() -> None:
         if os.environ.get("ONCE") == "1":
             return
         time.sleep(POLL_SECONDS)
+    # beat() keeps the last state, and status.json outlives restarts, so a "not-set-up" from before
+    # AIMSBY_DIR was fixed would stay, and the API would keep treating this updater as unusable.
+    if (read_json(STATUS) or {}).get("state") == "not-set-up":
+        Job(None, None).status("idle")
     while True:
         request = read_json(REQUEST) or {}
         request_id, version = request.get("id"), request.get("version")

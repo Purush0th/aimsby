@@ -799,6 +799,10 @@ the chat it always showing new one but the last active one can be preserved if n
       updater replaced itself) — the updater works through Docker Desktop. Push verified with a
       planner event. The phone needed one uninstall for the new signing key. alpha.10's release
       attached ".env.example" as "Default.env.example" (GitHub renames dot-files): now `env.example`.
+      2026-11-19: Aimsby reinstall at `C:\Aimsby` with `AIMSBY_DIR=/run/desktop/mnt/host/c/Aimsby`.
+      Fixed: a "not-set-up" status from before AIMSBY_DIR was set stayed in status.json after the
+      updater found `.env`, so Settings kept showing it and the API kept the updater unusable; the
+      updater now resets it to idle (test added, updater 10 pass). Not released yet.
 - [x] **F1d. Chat opens the latest conversation** (web and phone). The phone opens the most recently
       used conversation (on any device) when the chat opens; "New chat" and History work as before.
       Web: plain `/chat` goes to the latest; "New chat" links to `/chat?new=1` (also used after

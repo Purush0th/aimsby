@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-17 - data-bound ids renamed to Aimsby (`e4cf94d`, not pushed); keystore alias and secrets done_
+_Last updated: 2026-11-17 - data-bound ids renamed (`6831bac`) and released as server `v0.1.0-alpha.31`; prod install in progress_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,13 +8,17 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Fallbacks dropped (`80c60e0`, pushed) and the data-bound ids renamed (`e4cf94d`, committed, not
-  pushed or released): Data Protection name/purposes `Aimsby.*`, `aimsby.db`, compose project
-  `aimsby` (`aimsby_*` volumes), Litestream path, `aimsby:` links only. Needs a server and a phone
-  release. Owner then: restores the backup into `aimsby_api-data` renaming `personaos.db*` to
+- Updater fix (uncommitted, `deploy/updater/updater.py`): a stale "not-set-up" status no longer
+  outlives a fixed AIMSBY_DIR; updater tests 10 pass. Ships with the next server release. Prod
+  (`C:\Aimsby`, `AIMSBY_DIR=/run/desktop/mnt/host/c/Aimsby`) still shows the old message until then.
+- Fallbacks dropped (`80c60e0`) and the data-bound ids renamed (`6831bac`, pushed; server
+  released as `v0.1.0-alpha.31`, phone as `mobile-v0.1.0-alpha.33`, both green; the phone build
+  confirms the new `aimsby` keystore alias and secrets): Data Protection name/purposes
+  `Aimsby.*`, `aimsby.db`, compose project `aimsby` (`aimsby_*` volumes), Litestream path,
+  `aimsby:` links only. Owner then: restores the backup into `aimsby_api-data` renaming `personaos.db*` to
   `aimsby.db*`, re-enters the AI key, Firebase file and speech key, `ollama cp` the model to an
   `aimsby-` name and re-picks it. Keystore alias is now `aimsby` and both signing secrets are
-  reset (2026-11-17); the first phone CI build confirms them. Dev DB renamed to `aimsby.db`
+  reset (2026-11-17). Dev DB renamed to `aimsby.db`
   (its stored keys no longer decrypt; re-enter them in dev).
 - Rename follow-up (owner): upload
   the new google-services.json (`com.aimsby.app`) in web Settings; install the Aimsby phone app
