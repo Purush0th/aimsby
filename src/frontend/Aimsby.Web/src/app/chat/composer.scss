@@ -128,8 +128,11 @@
 
     // The icon button sizes every svg inside it to its 24px icon size, so the 20px spinner's
     // circles were drawn 24px wide and turned around the 20px box's centre: a wobble.
+    // The button's content box is the 24px icon size, and the 20px spinner sat at its left edge,
+    // 2px off the button's centre: centred in that box instead.
     mat-progress-spinner {
       --mat-icon-button-icon-size: 100%;
+      margin-inline: auto;
     }
   }
 }

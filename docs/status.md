@@ -1,5 +1,5 @@
 # Status
-_Last updated: 2026-11-17 - data-bound ids renamed (`6831bac`) and released as server `v0.1.0-alpha.31`; prod install in progress_
+_Last updated: 2026-11-19 - updater stale-status fix and web send-spinner centring released as server `v0.1.0-alpha.32`_
 
 Snapshot for starting a session. The full task board, claims and history stay in
 [TODO.md](../TODO.md); when the two disagree, TODO.md wins.
@@ -8,9 +8,9 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - Nothing.
 
 ## Next
-- Updater fix (uncommitted, `deploy/updater/updater.py`): a stale "not-set-up" status no longer
-  outlives a fixed AIMSBY_DIR; updater tests 10 pass. Ships with the next server release. Prod
-  (`C:\Aimsby`, `AIMSBY_DIR=/run/desktop/mnt/host/c/Aimsby`) still shows the old message until then.
+- Prod (`C:\Aimsby`, `AIMSBY_DIR=/run/desktop/mnt/host/c/Aimsby`): install `v0.1.0-alpha.32` by
+  hand once (pin `AIMSBY_VERSION`, `docker compose pull && docker compose up -d`); its updater is
+  stuck on the stale "not-set-up" status until it runs the fixed updater.
 - Fallbacks dropped (`80c60e0`) and the data-bound ids renamed (`6831bac`, pushed; server
   released as `v0.1.0-alpha.31`, phone as `mobile-v0.1.0-alpha.33`, both green; the phone build
   confirms the new `aimsby` keystore alias and secrets): Data Protection name/purposes
@@ -38,6 +38,9 @@ Snapshot for starting a session. The full task board, claims and history stay in
 - iOS through the web app first.
 
 ## Done (recent)
+- 2026-11-19: server `v0.1.0-alpha.32`: updater clears a stale "not-set-up" status once .env is
+  found (`b51fd7a`, updater tests pass); web chat send-button spinner centred (was 2px left,
+  checked by headless screenshot; web tests 179/179).
 - 2026-11-17: Aimsby released as `v0.1.0-alpha.30` (server; also ships A15) and
   `mobile-v0.1.0-alpha.32` (phone, `com.aimsby.app`); both built green. This release still
   pushed `personaos-*` images too; later ones will not. All images pull anonymously (public). Old `PersonaOS.*` build folders deleted; dev data,
